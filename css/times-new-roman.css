@@ -1,0 +1,99 @@
+/*
+ * Times New Roman override for gocloudforce.com
+ * ---------------------------------------------
+ * Forces every text element on the site to Times New Roman while leaving
+ * icon fonts (Font Awesome, Elementor, Dashicons, Material Icons, etc.)
+ * alone -- if icon fonts get overridden they render as stray letters.
+ *
+ * Paste the contents of this file into your platform's custom CSS box:
+ *   WordPress  -> Appearance > Customize > Additional CSS
+ *   Elementor  -> Site Settings > Custom CSS
+ *   Squarespace-> Website > Website Tools > Custom CSS
+ *   Webflow    -> Project Settings > Custom Code > Head (wrapped in <style>)
+ * ...or load it as a stylesheet after the theme's own CSS.
+ */
+
+/* 1. Base: set the font on the root so anything inheriting picks it up. */
+html,
+body {
+  font-family: "Times New Roman", Times, serif !important;
+}
+
+/* 2. Catch elements that declare their own font-family in theme CSS. */
+body,
+button,
+input,
+select,
+optgroup,
+textarea,
+h1, h2, h3, h4, h5, h6,
+p, a, li, dt, dd, th, td,
+blockquote, cite, figcaption, label, legend,
+small, strong, em, span, div,
+.site-title,
+.site-description,
+.entry-title,
+.entry-content,
+.widget,
+.menu,
+.nav-menu,
+.navbar,
+.button,
+.btn,
+.wp-block-button__link {
+  font-family: "Times New Roman", Times, serif !important;
+}
+
+/* 3. Page-builder wrappers (Elementor, Divi, WPBakery, Beaver Builder). */
+.elementor-widget-container,
+.elementor-heading-title,
+.elementor-button,
+.elementor-button-text,
+.et_pb_module,
+.et_pb_text,
+.vc_custom_heading,
+.fl-module-content,
+.gform_wrapper,
+.wpforms-container {
+  font-family: "Times New Roman", Times, serif !important;
+}
+
+/* 4. Exceptions -- icon fonts must keep their own family. */
+i[class],
+.fa, .fas, .far, .fab, .fal, .fad, .fa-solid, .fa-regular, .fa-brands,
+[class^="fa-"], [class*=" fa-"],
+.eicon, [class^="eicon-"], [class*=" eicon-"],
+.dashicons, .dashicons-before::before,
+[class^="dashicons-"], [class*=" dashicons-"],
+.material-icons, .material-symbols-outlined,
+.et-pb-icon, [class^="et-"], [class*=" et-"],
+[class^="icon-"], [class*=" icon-"],
+[class^="ti-"], [class*=" ti-"],
+[class^="jki"], [class*=" jki"],
+.elementor-icon,
+.slick-arrow::before,
+.swiper-button-next::after,
+.swiper-button-prev::after {
+  font-family: inherit;
+}
+
+/* Re-assert the icon fonts' own families where the theme set them via ::before. */
+.fa::before, .fas::before, .far::before, .fab::before,
+[class^="fa-"]::before, [class*=" fa-"]::before,
+.eicon::before, [class^="eicon-"]::before, [class*=" eicon-"]::before,
+.dashicons::before, [class^="dashicons-"]::before,
+[class^="icon-"]::before, [class*=" icon-"]::before {
+  font-family: inherit !important;
+}
+
+/* 5. Keep code samples monospaced -- delete this block if you want
+      Times New Roman there too. */
+code,
+kbd,
+pre,
+samp,
+tt,
+.wp-block-code,
+.wp-block-preformatted {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+}
