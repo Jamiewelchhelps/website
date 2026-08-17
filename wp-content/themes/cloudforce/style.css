@@ -1,0 +1,20 @@
+/*
+Theme Name: Cloudforce
+Theme URI: https://gocloudforce.com/
+Author: Cloudforce
+Description: Custom WordPress theme for Cloudforce — the Frontier Firm behind nebulaONE®. Replaces the legacy cfwp theme with a token-driven design system, editable homepage sections, and no page-builder dependency.
+Version: 1.0.0
+Requires at least: 6.0
+Tested up to: 6.6
+Requires PHP: 8.0
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: cloudforce
+Tags: business, custom-menu, custom-logo, featured-images, threaded-comments, translation-ready
+*/
+
+/*
+ * Styles live in assets/css/main.css so they can be versioned and cached
+ * independently. This file exists for the theme header above, which is how
+ * WordPress identifies the theme.
+ */
