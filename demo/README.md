@@ -1,7 +1,14 @@
 # QED footer — particle dissolve
 
-`qed-dissolve.html` is a self-contained animated footer graphic: no build step, no
-assets, no dependencies. Open the file in a browser.
+`qed-dissolve.html` is a self-contained animated footer graphic: no build step,
+no dependencies. Open the file in a browser.
+
+**Using real artwork (recommended):** drop an illustration next to the file as
+`mountains.png` (or pass `?art=<url>`) and it becomes the artwork — scaled to
+cover, anchored bottom-centre, with the logo, grid, links, dissolve and flecks
+layered exactly as before. The procedural range below is only the fallback when
+no image is present. The fleck spawner reads ink density straight from whatever
+was drawn, so debris comes off the image's dark strokes automatically.
 
 ## What it does
 

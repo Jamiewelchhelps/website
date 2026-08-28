@@ -537,6 +537,17 @@ function drawLogo(g){
   g.restore();
 }
 
+/* When a real illustration is supplied (demo/mountains.png next to this file,
+ * or ?art=<url>), it becomes the artwork and the procedural range below is
+ * only the fallback. The dissolve, flecks, grid, logo and links are identical
+ * either way — the engine doesn't care where the pixels came from. */
+let ART = null;                                  // HTMLImageElement once loaded
+function drawArtImage(g){
+  // cover the design box, anchored bottom-centre so the range meets the edge
+  const sc = Math.max(DW/ART.naturalWidth, DH/ART.naturalHeight);
+  const w = ART.naturalWidth*sc, h = ART.naturalHeight*sc;
+  g.drawImage(ART, (DW - w)/2, DH - h, w, h);
+}
 function buildScene(){
   const g = sctx;
   g.setTransform(1,0,0,1,0,0);
@@ -544,6 +555,7 @@ function buildScene(){
   g.setTransform(S*DPR,0,0,S*DPR, offX*DPR, offY*DPR);
   rnd = mulberry32(20260828);
   drawGrid(g);
+  if(ART){ drawArtImage(g); drawLogo(g); return; }
   drawPeaks(g);
   // foreground treeline hugging the bottom edge, dense at the outer corners
   const tk = DW/(1795*(L.mSpan||1));
@@ -628,11 +640,17 @@ function buildMask(){
   tg.drawImage(scene, 0,0, MW, MH);
   tg.setTransform(S/CELL, 0, 0, S/CELL, offX/CELL, offY/CELL);
   drawType(tg, false);
-  const d = tg.getImageData(0,0,MW,MH).data;
   ink = new Float32Array(MW*MH);
-  for(let k=0;k<MW*MH;k++){
-    const lum = (d[k*4]*0.3 + d[k*4+1]*0.59 + d[k*4+2]*0.11);
-    ink[k] = clamp((236 - lum)/150, 0, 1);
+  try{
+    const d = tg.getImageData(0,0,MW,MH).data;
+    for(let k=0;k<MW*MH;k++){
+      const lum = (d[k*4]*0.3 + d[k*4+1]*0.59 + d[k*4+2]*0.11);
+      ink[k] = clamp((236 - lum)/150, 0, 1);
+    }
+  }catch(e){
+    // cross-origin art taints the canvas; assume ink in the lower half so the
+    // dissolve still sheds debris where the range lives
+    for(let j=0;j<MH;j++) for(let i=0;i<MW;i++) ink[i+j*MW] = j > MH*0.38 ? 0.5 : 0.1;
   }
 }
 
@@ -857,6 +875,15 @@ addEventListener('keydown', e => {
     clock = 0; lastP = 0; parts.length = 0;
   }
 });
+
+(() => {
+  const src = params.get('art') || 'mountains.png';
+  const im = new Image();
+  im.crossOrigin = 'anonymous';
+  im.onload = () => { ART = im; resize(); };
+  im.onerror = () => {};                          // keep the procedural fallback
+  im.src = src;
+})();
 
 resize();
 if(FREEZE !== null || prefersStill){ frame(0.016); }
