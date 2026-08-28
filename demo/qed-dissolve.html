@@ -63,9 +63,9 @@ const PAPER = '#f4f2ed';
 const GRID  = 'rgba(160,156,146,.55)';
 const HEAD  = '#1b1b19';
 const MUTED = '#5c5b56';
-const CELL  = 3;                      // mask cell size, css px -> fleck grain
-const EDGE  = 0.215;                  // width of the dissolve band (0..1 of W)
-const RAMP  = 0.030;                  // per-cell fade so cells don't hard-pop
+const CELL  = 2;                      // mask cell size, css px -> fleck grain
+const EDGE  = 0.170;                  // width of the dissolve band (0..1 of W)
+const RAMP  = 0.012;                  // per-cell fade — near-binary, edges stay hard
 
 const FONT  = 'system-ui,-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif';
 
@@ -92,6 +92,8 @@ function rr(a,b){return a+(b-a)*rnd()}
 function hash1(n,s){const x=Math.sin(n*127.1+s*311.7)*43758.5453;return x-Math.floor(x)}
 function vnoise1(x,s){const i=Math.floor(x),f=x-i,u=f*f*(3-2*f);return hash1(i,s)*(1-u)+hash1(i+1,s)*u}
 function fbm1(x,s,oct){oct=oct||5;let a=.5,sum=0,f=1;for(let o=0;o<oct;o++){sum+=a*vnoise1(x*f,s+o*17);f*=2.03;a*=.5}return sum}
+// ridged multifractal — creases instead of blobs, which is what makes rock read as rock
+function ridged1(x,s,oct){oct=oct||4;let a=.55,sum=0,f=1;for(let o=0;o<oct;o++){const n=1-Math.abs(vnoise1(x*f,s+o*13)*2-1);sum+=a*n*n;f*=2.11;a*=.52}return sum}
 function hash2(i,j,s){const x=Math.sin(i*127.1+j*311.7+s*74.7)*43758.5453;return x-Math.floor(x)}
 function vnoise2(x,y,s){
   const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j;
@@ -100,7 +102,7 @@ function vnoise2(x,y,s){
   return (a*(1-ux)+b*ux)*(1-uy)+(c*(1-ux)+d*ux)*uy;
 }
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
-const smooth=t=>t*t*(3-2*t);
+const smooth=t=>t*t*t*(t*(t*6-15)+10);   // smootherstep — a decisive front
 
 /* --------------------------- footer content ----------------------- */
 const COLS = [
@@ -111,7 +113,7 @@ const COLS = [
 const LAYOUTS = {
   // desktop: logo + three link columns across four grid cells
   wide: {
-    DW:1795, DH:1125, mScale:1,
+    DW:1795, DH:1125, mSpan:1,
     gx:[80,485,895,1305,1710], gy:80,
     logoCX:282.5, logoCY:186, markS:57, wordF:62, wordGap:22,
     tagF:20, tagY:[261,288], copyY:342,
@@ -120,7 +122,7 @@ const LAYOUTS = {
   },
   // portrait / small screens: logo stacked above three tighter columns
   narrow: {
-    DW:820, DH:1400, mScale:0.72,
+    DW:820, DH:1400, mSpan:0.52,    // show the middle half of the range, full size
     gx:[30,283,537,790], gy:60,
     logoCX:410, logoCY:172, markS:60, wordF:64, wordGap:20,
     tagF:22, tagY:[258,288], copyY:348,
@@ -189,10 +191,10 @@ function makeRidge(cfg){
     }
     // secondary shoulders + saddles
     h += cfg.detail * (fbm1(x/(230*kx), cfg.seed) - .38) * (0.30 + 0.85*h/maxH);
-    // jagged summit noise, strongest up high
+    // jagged rock: ridged noise at two scales, present all the way down the flanks
     const rel = clamp(h/maxH, 0, 1);
-    h += cfg.jag * (fbm1(x/(26*kx), cfg.seed+41, 3) - .5) * Math.pow(rel, 1.5);
-    h += cfg.jag * 0.45 * (fbm1(x/(9*kx), cfg.seed+77, 2) - .5) * Math.pow(rel, 2.2);
+    h += cfg.jag * (ridged1(x/(44*kx), cfg.seed+41, 3) - .45) * (0.35 + 0.65*rel);
+    h += cfg.jag * 0.34 * (ridged1(x/(15*kx), cfg.seed+77, 2) - .45) * Math.pow(rel, 1.3);
     ys[i] = cfg.base - Math.max(h, 0);
   }
   return {ys, x0, x1, N, base:cfg.base, cfg};
@@ -207,124 +209,128 @@ function ridgeSlope(r, x){
   const d = 7*(r.cfg.kx||1);
   return (ridgeY(r, x+d) - ridgeY(r, x-d)) / (2*d);
 }
+// the face below the crest is smooth even where the crest itself is serrated,
+// so shading reads the macro form, not the summit jitter
+function ridgeSlopeWide(r, x){
+  const d = 62*(r.cfg.kx||1);
+  let a = 0, b = 0;
+  for(let k=1;k<=3;k++){ a += ridgeY(r, x - d*k/3); b += ridgeY(r, x + d*k/3); }
+  return (b - a) / (2*d*2);
+}
 
 function drawRidge(g, r, o){
   const pen = new Pen(g);
   const kx = o.kx || 1, kv = o.kv || 1;
   const bottom = DH*1.151;
+  const sd = r.cfg.seed;
 
-  // 1. opaque fill so this range occludes everything behind it
-  g.beginPath();
-  g.moveTo(r.x0, bottom);
-  for(let x = r.x0; x <= r.x1; x += 3*kx) g.lineTo(x, ridgeY(r,x));
-  g.lineTo(r.x1, bottom);
-  g.closePath();
+  // silhouette, used for both the knock-out fill and the clip
+  const sil = new Path2D();
+  sil.moveTo(r.x0, bottom);
+  for(let x = r.x0; x <= r.x1; x += 2*kx) sil.lineTo(x, ridgeY(r,x));
+  sil.lineTo(r.x1, bottom);
+  sil.closePath();
   g.fillStyle = PAPER;
-  g.fill();
+  g.fill(sil);
 
   g.save();
-  g.clip();                                   // keep all shading inside the range
+  g.clip(sil);
 
-  // 2. crest line, redrawn with a slight hand wobble
+  // Facets. The range is cut into bands; each band gets its own tone and its
+  // own drift, so faces alternate light/dark and the boundaries read as arêtes.
+  const bandAt = x => {
+    const v = vnoise1(x/(78*kx), sd+7)*0.62 + vnoise1(x/(26*kx), sd+19)*0.38;
+    return Math.floor(v*8);
+  };
+  const bandTone  = i => 0.60 + 0.40*hash1(i*3.7, sd+31);
+  const bandDrift = i => (hash1(i*5.1, sd+43) - 0.5)*0.22;
+
+  // 1. faces — short parallel strokes along the fall line. Independent marks,
+  //    never a connected walk, so tone comes from packing rather than streaks.
+  const hx = o.hatchX, hy = o.hatchY;
+  let prevBand = bandAt(r.x0);
+  const aretes = [];
+  for(let x = r.x0; x < r.x1; x += hx){
+    const top = ridgeY(r, x);
+    if(top > bottom) continue;
+    const band = bandAt(x);
+    if(band !== prevBand){ aretes.push(x); prevBand = band; }
+    const tone  = bandTone(band);
+    const slope = ridgeSlopeWide(r, x);
+    const shade = clamp(0.5 + slope*1.30, 0, 1);
+    const dirx  = clamp(slope, -1.7, 1.7)*0.50 + bandDrift(band);
+    // scalloped snowline: strokes stop hard, leaving crisp white fields
+    const snow = (42 + 82*vnoise1(x/(52*kx), sd+23))*kv;
+    const faceH = bottom - top;
+    for(let d = rr(0, hy); d < faceH; d += hy){
+      const y = top + d;
+      const depth = clamp(d/(560*kv), 0, 1);
+      // smooth 2-D mottling keeps the tone from reading as vertical stripes
+      const mottle = 0.70 + 0.62*vnoise2(x/(78*kx), y/(88*kv), sd+3);
+      let dens = (0.12 + shade*1.10) * (0.52 + 0.62*tone) * mottle * (0.86 + 0.58*depth) * o.dens;
+      if(shade < 0.44 && d < snow) dens *= 0.12;
+      if(d < 14*kv) dens *= 0.35;                    // keep the crest edge clean
+      if(rnd() > dens) continue;
+      const len = rr(1.1, 2.6)*hy;
+      const jx = x + rr(-hx*0.55, hx*0.55);
+      const jy = y + rr(-hy*0.45, hy*0.45);
+      const ex = jx + dirx*len + (vnoise1((jy)/(15*kx), sd+13)-.5)*2.2*kx;
+      const ey = jy + len;
+      if(ey < ridgeY(r, ex) || jy < ridgeY(r, jx)) continue;
+      pen.line(jx, jy, ex, ey, o.hatch*rr(0.62, 1.15), o.hatchW);
+      // cross-hatch only in the deepest shadow, to push it darker still
+      if(dens > 0.80 && rnd() < 0.30){
+        const cl = rr(0.7, 1.6)*hy;
+        pen.line(jx, jy, jx + cl*0.9, jy + cl*0.25, o.hatch*rr(0.5,0.9), o.hatchW*0.9);
+      }
+    }
+  }
+
+  // 2. arêtes — the hard creases where two faces meet
+  for(const ax of aretes){
+    const top = ridgeY(r, ax);
+    if(top > bottom - 40*kv) continue;
+    const slope = ridgeSlopeWide(r, ax);
+    let px = ax, py = top + rr(0, 5)*kv;
+    let dx = clamp(slope, -1.7, 1.7)*0.42 + (hash1(ax, sd+51)-0.5)*0.14;
+    const steps = Math.round(rr(0.25, 0.62)*(bottom - top)/(6*kv));
+    const a0 = o.crease*rr(0.75, 1.0);
+    for(let k=0;k<steps;k++){
+      const nx = px + dx*6*kv + (vnoise1((px + k*9)/(13*kx), sd+9)-.5)*1.8*kx;
+      const ny = py + 6*kv;
+      if(ny > bottom || ny < ridgeY(r, nx)) break;
+      pen.line(px, py, nx, ny, a0*(1 - 0.5*k/steps), o.creaseW);
+      px = nx; py = ny; dx *= 0.99;
+    }
+  }
+
+  // 3. rock ledges — short horizontal ticks that break the fall lines up
+  for(let x = r.x0; x < r.x1; x += 7*kx){
+    const top = ridgeY(r, x);
+    const slope = ridgeSlopeWide(r, x);
+    const shade = clamp(0.5 + slope*1.30, 0, 1);
+    if(shade < 0.48) continue;
+    const n = Math.round(rr(0, 4));
+    for(let k=0;k<n;k++){
+      const d = rr(20, 320)*kv;
+      const y = top + d;
+      if(y > bottom) continue;
+      const l = rr(2.5, 9)*kx;
+      pen.line(x, y, x + l, y + rr(-1.2, 1.2)*kv, o.hatch*rr(0.6, 1.15), o.hatchW);
+    }
+  }
+
+  // 4. crest last, so the outline always stays crisp on top of the shading
   g.beginPath();
-  for(let x = r.x0; x <= r.x1; x += 2*kx){
-    const y = ridgeY(r,x) + (vnoise1(x/(6*kx), r.cfg.seed+3)-.5)*o.wob;
+  for(let x = r.x0; x <= r.x1; x += 1.6*kx){
+    const y = ridgeY(r,x) + (vnoise1(x/(5*kx), sd+3)-.5)*o.wob;
     if(x === r.x0) g.moveTo(x,y); else g.lineTo(x,y);
   }
   g.strokeStyle = 'rgba(26,26,24,'+o.crest+')';
   g.lineWidth = o.crestW;
   g.lineJoin = 'round';
+  g.lineCap = 'round';
   g.stroke();
-
-  // 3. fall-line hatching: broken lines running downslope from the crest.
-  //    Density comes from the facing (light from upper-left) so right-hand
-  //    faces go dark and left-hand faces stay as bare snow.
-  for(let x = r.x0; x < r.x1; x += o.hatchX){
-    const top = ridgeY(r, x);
-    if(top > bottom) continue;
-    const slope = ridgeSlope(r, x);
-    const shade = clamp(0.5 + slope*0.95, 0, 1);
-    const dirx  = clamp(slope, -2.6, 2.6) * 0.40;
-    let px = x + rr(-o.hatchX*0.5, o.hatchX*0.5);
-    let py = top + rr(1, 6)*kv;
-    const step = o.hatchY;
-    while(py < bottom){
-      const d = py - top;
-      const depth = clamp(d/(620*kv), 0, 1);
-      let dens = (0.30 + shade*0.92) * (1 - 0.42*Math.pow(depth, 1.5)) * o.dens;
-      if(shade < 0.34 && d < (80 + 110*(0.34-shade)/0.34)*kv) dens *= 0.20;   // snowfield
-      dens *= 0.72 + 0.56*vnoise1((x*0.55 + d*1.7)/(24*kx), r.cfg.seed+5);      // strata banding
-      const nx = px + dirx*step + (vnoise1((px + d)/(12*kx), r.cfg.seed+13)-.5)*2.6*kx;
-      const ny = py + step;
-      // smooth mark noise groups the steps into dashes instead of one long comb
-      const mark = vnoise1((d*1.75 + x*0.37)/(8.5*kv), r.cfg.seed+61);
-      if(mark < dens*0.92){
-        const a = o.hatch*(0.36 + 0.9*clamp(dens,0,1));
-        pen.line(px, py, nx, ny, a, o.hatchW);
-        // cross strokes where the face is deepest in shadow
-        if(dens > 0.72 && rnd() < 0.13){
-          const cl = rr(3, 9)*kx;
-          pen.line(px, py, px + cl, py - cl*0.35, a*0.7, o.hatchW*0.85);
-        }
-      }
-      px = nx; py = ny;
-    }
-  }
-
-  // 4. spurs — the darker creases that give each face its structure
-  for(let x = r.x0; x < r.x1; x += o.spurGap){
-    const sx = x + rr(-o.spurGap*0.45, o.spurGap*0.45);
-    const top = ridgeY(r, sx);
-    if(top > bottom - 60*kv) continue;
-    const slope = ridgeSlope(r, sx);
-    const len = rr(o.spurLen*0.25, o.spurLen*0.62) * (0.55 + clamp((r.base-top)/(560*kv), 0, 1));
-    let px = sx, py = top + rr(2, 14)*kv, dx = clamp(slope, -2.4, 2.4)*0.44;
-    const steps = Math.max(3, Math.round(len/(8*kv)));
-    const a = rr(o.spur*0.55, o.spur);
-    for(let k=0;k<steps;k++){
-      const nx = px + dx*8*kv + (vnoise1((px + k*11)/(15*kx), r.cfg.seed+9)-.5)*3.4*kx;
-      const ny = py + 8*kv;
-      if(ny > bottom) break;
-      if(vnoise1((k*8 + sx*0.3)/(11*kx), r.cfg.seed+91) < 0.74)
-        pen.line(px, py, nx, ny, a*(1 - k/steps*0.6), o.spurW);
-      px = nx; py = ny; dx *= 0.985;
-    }
-  }
-
-  // 5. short cliff striations on the steepest ground
-  for(let x = r.x0; x < r.x1; x += o.cliffGap){
-    const slope = ridgeSlope(r, x);
-    if(Math.abs(slope) < 0.7) continue;
-    const top = ridgeY(r, x) + rr(40, 210)*kv;
-    const h = rr(28, 90)*kv;
-    const n = Math.round(rr(5, 13));
-    for(let k=0;k<n;k++){
-      const cx = x + rr(-o.cliffGap*0.45, o.cliffGap*0.45);
-      let py = top + rr(-14,14)*kv, px = cx;
-      const segs = Math.max(2, Math.round(h/(11*kv)));
-      const a = rr(o.hatch*0.7, o.hatch*1.4);
-      for(let m=0;m<segs;m++){
-        const ny = py + 11*kv, nx = px + (vnoise1((py + k*7)/(19*kx), r.cfg.seed+33)-.5)*3*kx + clamp(slope,-1,1)*1.1*kx;
-        if(ny > bottom) break;
-        pen.line(px, py, nx, ny, a, o.hatchW*1.05);
-        px = nx; py = ny;
-      }
-    }
-  }
-
-  // 6. a few contour flicks parallel to the crest, for the snowy faces
-  for(let x = r.x0; x < r.x1; x += 9*kx){
-    const top = ridgeY(r, x);
-    const slope = ridgeSlope(r, x);
-    const shade = clamp(0.5 + slope*0.95, 0, 1);
-    if(shade > 0.42) continue;
-    if(rnd() > 0.30) continue;
-    const d = rr(14, 190)*kv;
-    const y = top + d;
-    if(y > bottom) continue;
-    const l = rr(5, 17)*kx;
-    pen.line(x, y, x + l, y + l*clamp(slope,-1.6,1.6)*0.55, o.hatch*rr(0.35,0.8), o.hatchW*0.9);
-  }
 
   pen.flush();
   g.restore();
@@ -381,15 +387,15 @@ function drawTreeband(g, cfg){
 // ranges are stored normalised (fractions of the design box) so the same
 // art re-fits itself to the wide and narrow layouts
 const RANGE_SPECS = [
-  {baseOff:0.1244, seed:11, detail:0.1200, jag:0.0516,
+  {baseOff:0.1244, seed:11, detail:0.1200, jag:0.0560,
    peaks:[{px:-0.0223,pw:0.3454,ph:0.5022,s:0.95},
           {px:0.2228,pw:0.2897,ph:0.4711,s:0.9},
           {px:0.4568,pw:0.3565,ph:0.5271,s:0.85},
           {px:0.6964,pw:0.3343,ph:0.5556,s:0.85},
           {px:0.9025,pw:0.3565,ph:0.5804,s:0.9},
           {px:1.1031,pw:0.3120,ph:0.5111,s:0.95}],
-   o:{crest:.38, crestW:1.0, wob:2.4, spur:.20, spurW:.8, spurGap:44, spurLen:180, hatchX:4.2, hatchY:8.5, hatch:.24, hatchW:.8, dens:.52, cliffGap:190}},
-  {baseOff:0.1244, seed:29, detail:0.1422, jag:0.0764,
+   o:{crest:.50, crestW:1.05, wob:2.2, crease:.26, creaseW:.85, hatchX:3.0, hatchY:6.0, hatch:.24, hatchW:.75, dens:.54}},
+  {baseOff:0.1244, seed:29, detail:0.1422, jag:0.0640,
    peaks:[{px:0.0334,pw:0.2897,ph:0.5502,s:0.9},
           {px:0.1961,pw:0.2618,ph:0.6089,s:0.82},
           {px:0.3120,pw:0.2396,ph:0.5467,s:0.9},
@@ -399,39 +405,44 @@ const RANGE_SPECS = [
           {px:0.7532,pw:0.2897,ph:0.6996,s:0.78},
           {px:0.8802,pw:0.2618,ph:0.5947,s:0.88},
           {px:1.0362,pw:0.2897,ph:0.5449,s:0.95}],
-   o:{crest:.70, crestW:1.2, wob:3.0, spur:.38, spurW:.9, spurGap:30, spurLen:300, hatchX:3.6, hatchY:7.4, hatch:.36, hatchW:.85, dens:.80, cliffGap:130}},
-  {baseOff:0.1244, seed:53, detail:0.1244, jag:0.0587,
+   o:{crest:.86, crestW:1.30, wob:2.6, crease:.46, creaseW:1.0, hatchX:2.6, hatchY:5.4, hatch:.36, hatchW:.8, dens:.88}},
+  {baseOff:0.1244, seed:53, detail:0.1244, jag:0.0640,
    peaks:[{px:0.1003,pw:0.2897,ph:0.4596,s:0.88},
           {px:0.3148,pw:0.2786,ph:0.5004,s:0.85},
           {px:0.5014,pw:0.2897,ph:0.4258,s:0.95},
           {px:0.6574,pw:0.2674,ph:0.4827,s:0.86},
           {px:0.8022,pw:0.3120,ph:0.5129,s:0.84},
           {px:1.0028,pw:0.2897,ph:0.4542,s:0.92}],
-   o:{crest:.80, crestW:1.3, wob:3.2, spur:.44, spurW:1.0, spurGap:26, spurLen:330, hatchX:3.3, hatchY:7.0, hatch:.42, hatchW:.9, dens:.90, cliffGap:112}},
-  {baseOff:0.1422, seed:71, detail:0.1067, jag:0.0444,
+   o:{crest:.94, crestW:1.45, wob:2.8, crease:.54, creaseW:1.1, hatchX:2.4, hatchY:5.2, hatch:.44, hatchW:.85, dens:.98}},
+  {baseOff:0.1422, seed:71, detail:0.1067, jag:0.0500,
    peaks:[{px:0.0223,pw:0.3120,ph:0.3493,s:0.92},
           {px:0.2396,pw:0.3008,ph:0.4062,s:0.86},
           {px:0.4401,pw:0.3120,ph:0.3369,s:0.95},
           {px:0.6184,pw:0.2897,ph:0.3849,s:0.88},
           {px:0.7911,pw:0.3343,ph:0.4151,s:0.86},
           {px:1.0139,pw:0.3120,ph:0.3600,s:0.94}],
-   o:{crest:.88, crestW:1.45, wob:3.4, spur:.50, spurW:1.05, spurGap:23, spurLen:340, hatchX:3.1, hatchY:6.7, hatch:.48, hatchW:.95, dens:.98, cliffGap:100}},
+   o:{crest:1.0, crestW:1.60, wob:3.0, crease:.60, creaseW:1.2, hatchX:2.3, hatchY:5.0, hatch:.50, hatchW:.9, dens:1.06}},
 ];
 
+// mSpan is how much of the range the layout shows: 1 = the whole thing, 0.5 =
+// the middle half at twice the scale. Vertical scale follows the horizontal one,
+// so the drawing keeps its proportions in every layout.
 function rangesFor(){
-  const kx = DW/1795;                      // horizontal re-fit
-  const kv = (DH*L.mScale)/1125;           // vertical re-fit
+  const kx = DW/(1795*(L.mSpan||1));
+  const kv = kx;
   return RANGE_SPECS.map(R => {
     const base = DH + R.baseOff*DH;
     const o = Object.assign({}, R.o, {kx, kv,
-      crestW:R.o.crestW*kx, wob:R.o.wob*kv, spurW:R.o.spurW*kx,
-      spurGap:R.o.spurGap*kx, spurLen:R.o.spurLen*kv,
+      crestW:R.o.crestW*kx, wob:R.o.wob*kv, creaseW:R.o.creaseW*kx,
       hatchX:R.o.hatchX*kx, hatchY:R.o.hatchY*kv,
       hatchW:R.o.hatchW*kx, cliffGap:R.o.cliffGap*kx});
     const cfg = {
       base, seed:R.seed, kx, kv,
-      detail:R.detail*DH*L.mScale, jag:R.jag*DH*L.mScale,
-      peaks:R.peaks.map(q => ({x:q.px*DW, w:q.pw*DW, y:base - q.ph*DH*L.mScale, s:q.s}))
+      detail:R.detail*1125*kv, jag:R.jag*1125*kv,
+      peaks:R.peaks.map(q => ({
+        x:(q.px - 0.5)*1795*kx + DW/2,
+        w:q.pw*1795*kx,
+        y:base - q.ph*1125*kv, s:q.s}))
     };
     return {cfg, o};
   });
@@ -491,11 +502,11 @@ function buildScene(){
   drawGrid(g);
   for(const R of rangesFor()) drawRidge(g, makeRidge(R.cfg), R.o);
   // foreground treeline hugging the bottom edge, dense at the outer corners
-  const tk = (DH*L.mScale)/1125;
+  const tk = DW/(1795*(L.mSpan||1));
   for(const b of [
-    {x0:-0.134, x1:0.390, count:520, y0:0.853, y1:1.080, h0:16, h1:74, bias:2.6},
-    {x0: 0.602, x1:1.148, count:560, y0:0.853, y1:1.080, h0:16, h1:74, bias:0.38},
-    {x0: 0.345, x1:0.669, count:120, y0:0.915, y1:1.071, h0:12, h1:38, bias:1}
+    {x0:-0.134, x1:0.390, count:520, y0:0.860, y1:1.080, h0:12, h1:56, bias:2.6},
+    {x0: 0.602, x1:1.148, count:560, y0:0.860, y1:1.080, h0:12, h1:56, bias:0.38},
+    {x0: 0.345, x1:0.669, count:120, y0:0.920, y1:1.071, h0:10, h1:30, bias:1}
   ]) drawTreeband(g, {
     x0:b.x0*DW, x1:b.x1*DW, count:b.count, bias:b.bias,
     y0:DH*1.151 - (1.151-b.y0)*1125*tk,
@@ -559,8 +570,9 @@ function buildMask(){
     for(let i=0;i<MW;i++){
       const xn = i/(MW-1);
       // clumps (drifting, low frequency) + per-cell grit
-      const clump = vnoise2(i/13, j/13, 4) * 0.55 + vnoise2(i/4.5, j/4.5, 9) * 0.45;
-      const n = clump*0.62 + nr()*0.38;
+      const chunk = vnoise2(i/50, j/50, 4);      // whole pieces let go together
+      const grain = vnoise2(i/16, j/16, 9);      // then break into smaller bits
+      const n = chunk*0.40 + grain*0.30 + nr()*0.30;
       thr[i+j*MW] = xn*(1-EDGE) + n*EDGE;
     }
   }
@@ -593,7 +605,7 @@ function paintMask(p){
  *  Flecks along the live edge
  * ------------------------------------------------------------------ */
 function spawn(p, speed, dir){
-  const want = Math.min(64, Math.round(Math.abs(speed)*1900));
+  const want = Math.min(70, Math.round(Math.abs(speed)*2300));
   if(want <= 0) return;
   const lo = Math.max(0, Math.floor((p - EDGE*1.1)*MW));
   const hi = Math.min(MW-1, Math.ceil((p + EDGE*0.6)*MW));
@@ -605,22 +617,22 @@ function spawn(p, speed, dir){
     const j = (Math.random()*MH)|0;
     const k = i + j*MW;
     if(ink[k] < 0.16) continue;
-    if(Math.abs(thr[k] - p) > 0.035) continue;
+    if(Math.abs(thr[k] - p) > 0.042) continue;
     made++;
-    const life = rr(0.40, 1.15);
+    const life = rr(0.34, 0.95);
     parts.push({
       x:(i + Math.random())*CELL,
       y:(j + Math.random())*CELL,
-      vx: rr(10, 86) + Math.abs(speed)*180,
-      vy: rr(-46, 26),
+      vx: rr(6, 62) + Math.abs(speed)*140,
+      vy: rr(-34, 20),
       rot: rr(-1, 1),
-      len: rr(2.6, 8.5),
-      w: rr(1.0, 2.3),
-      a: rr(0.45, 0.95) * (0.4 + ink[k]),
+      len: rr(3.2, 11),
+      w: rr(1.1, 2.6),
+      a: rr(0.55, 1.0) * (0.45 + ink[k]),
       t: 0, life
     });
   }
-  if(parts.length > 1400) parts.splice(0, parts.length-1400);
+  if(parts.length > 1600) parts.splice(0, parts.length-1600);
 }
 
 function stepParts(dt){
@@ -630,8 +642,8 @@ function stepParts(dt){
     if(q.t >= q.life){ parts.splice(k,1); continue; }
     q.x += q.vx*dt;
     q.y += q.vy*dt;
-    q.vy += 150*dt;              // slight settle
-    q.vx *= (1 - 1.35*dt);
+    q.vy += 120*dt;              // slight settle
+    q.vx *= (1 - 2.1*dt);
     q.rot += dt*1.4;
   }
 }
@@ -641,7 +653,7 @@ function drawParts(g){
   g.lineCap = 'round';
   for(const q of parts){
     const f = q.t/q.life;
-    const a = q.a * (1 - f*f);
+    const a = q.a * (1 - f)*(1 - f*0.6);
     if(a <= 0.02) continue;
     const dx = Math.cos(q.rot)*q.len, dy = Math.sin(q.rot)*q.len*0.55;
     g.strokeStyle = 'rgba(26,26,24,'+a.toFixed(3)+')';
@@ -695,10 +707,11 @@ function frame(dt){
   if(p < 0.999){
     paintMask(p);
     ctx.globalCompositeOperation = 'destination-in';
-    // smoothing the upscale keeps the grain organic instead of pixel-blocky
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'low';
+    // no smoothing: cells stay hard-edged so the front reads as broken ink
+    // rather than a fade. CELL is small enough to read as grain, not squares.
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(maskCv, 0, 0, cv.width, cv.height);
+    ctx.imageSmoothingEnabled = true;
   }
   ctx.globalCompositeOperation = 'destination-over';
   ctx.fillStyle = PAPER;
@@ -805,6 +818,8 @@ resize();
 if(FREEZE !== null || prefersStill){ frame(0.016); }
 raf = requestAnimationFrame(loop);
 window.__ready = true;
+// test hook: jump the timeline to a given ms offset
+window.__setClock = ms => { clock = ms; lastP = progressAt(ms).p; parts.length = 0; };
 })();
 </script>
 </body>
