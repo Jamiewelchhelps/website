@@ -13,13 +13,14 @@ breaks into small ink flecks that drift off and fade.
 Everything is drawn to a single `<canvas>` in a fixed "design space", so the whole
 composition scales as one graphic:
 
-- **Art** — four layers of **faceted peaks**. A mountain is an apex with a fan
-  of jagged ridge lines falling to its base; adjacent ridges bound a facet — one
-  plane of rock hatched as a unit (bright snow, grey rock, or cross-hatched
-  near-black shadow, lit from the upper-left, with adjacent planes pushed apart
-  in tone so every arête is a visible break). Internal ridges are drawn as
-  crisp creases, the skyline as the strongest line in the drawing. Plus a
-  conifer treeline. Drawn once into an offscreen canvas.
+- **Art** — four layers of densely packed, narrow **faceted spires**, generated
+  per layer (count, height/width ranges, one dominant summit right of centre).
+  A mountain is an apex with a fan of serrated ridge lines falling to its base;
+  adjacent ridges bound a facet hatched as one plane — small snow caps, grey
+  rock, or cross-hatched near-black shadow, lit from the upper-left, darkening
+  toward the foot so the masses connect. Adjacent planes are pushed apart in
+  tone so every arête is a hard break; the skyline is the strongest line. Plus
+  a conifer treeline. Drawn once into an offscreen canvas.
 - **Dissolve** — a low-resolution threshold field `thr = x·(1-EDGE) + noise·EDGE`,
   where the noise mixes three scales: coarse chunks that let go as whole pieces,
   mid grain, and per-cell grit. A cell is visible when `progress > thr`, so a
@@ -35,7 +36,7 @@ composition scales as one graphic:
 
 | constant | effect |
 | --- | --- |
-| `EDGE` | width of the dissolve band (0.17 ≈ 17% of the frame) |
+| `EDGE` | width of the dissolve band (0.17 ≈ 17% of the frame); mask noise is small-cluster + sand-grain scaled |
 | `CELL` | mask resolution in CSS px — smaller grain, more cost |
 | `RAMP` | per-cell fade — near-binary at 0.012, keeps edges hard |
 | `T_BUILD / T_HOLD / T_ERODE / T_GAP` | timeline, in ms |

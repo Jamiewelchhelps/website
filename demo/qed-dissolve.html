@@ -199,8 +199,9 @@ function ridgeline(ax, ay, bx, by, seed, jag){
     let x = ax + (bx-ax)*t;
     let y = ay + (by-ay)*bow;
     const amp = jag * Math.pow(Math.sin(Math.min(1, t*1.06)*Math.PI), 0.6);
-    x += (ridged1(t*6.5 + seed*13.7, seed) - .45) * amp;
-    y += (vnoise1(t*13 + seed*7.1, seed+5) - .5) * amp * .8;
+    x += (ridged1(t*11 + seed*13.7, seed) - .45) * amp * .5
+       + (ridged1(t*23 + seed*5.3, seed+9) - .45) * amp * .22;
+    y += (vnoise1(t*17 + seed*7.1, seed+5) - .5) * amp * .35;
     pts[i] = [x, y];
   }
   pts[0] = [ax, ay];
@@ -241,7 +242,7 @@ function buildMountain(cfg){
   // Adjacent facets are pushed apart so every arete is a visible tone break.
   for(const f of facets){
     const dirx = clamp((f.mbx - ax)/w, -1, 1);
-    f.tone = clamp(0.52 + dirx*0.62 + R(-0.14, 0.14), 0.02, 1);
+    f.tone = clamp(0.60 + dirx*0.55 + R(-0.13, 0.13), 0.06, 1);
   }
   for(let i=1;i<facets.length;i++){
     const d = facets[i].tone - facets[i-1].tone;
@@ -274,11 +275,11 @@ function hatchFacet(g, M, f, o){
 
   // rendering recipe per tone band
   let passes, gap, alpha, wgt, snow;
-  if(t < 0.24){       passes=1; gap=8.5; alpha=.30; wgt=.7;  snow=.66; }
-  else if(t < 0.45){  passes=1; gap=5.6; alpha=.42; wgt=.8;  snow=.40; }
-  else if(t < 0.66){  passes=1; gap=3.6; alpha=.60; wgt=.9;  snow=.14; }
-  else if(t < 0.85){  passes=2; gap=2.9; alpha=.72; wgt=1.0; snow=0;   }
-  else {              passes=3; gap=2.0; alpha=.95; wgt=1.15; snow=0;  }
+  if(t < 0.24){       passes=1; gap=6.6; alpha=.34; wgt=.75; snow=.52; }
+  else if(t < 0.45){  passes=1; gap=4.4; alpha=.48; wgt=.85; snow=.26; }
+  else if(t < 0.66){  passes=2; gap=3.1; alpha=.62; wgt=.9;  snow=.07; }
+  else if(t < 0.85){  passes=2; gap=2.4; alpha=.78; wgt=1.0; snow=0;   }
+  else {              passes=3; gap=1.8; alpha=.96; wgt=1.15; snow=0;  }
   gap *= o.k; wgt *= o.k;
 
   g.save();
@@ -308,7 +309,8 @@ function hatchFacet(g, M, f, o){
         }
         const x2 = sx + ddx*(dpos+dl) + rr(-1,1)*o.k;
         const y2 = sy + ddy*(dpos+dl) + rr(-1,1)*o.k;
-        const breathe = 0.72 + 0.55*vnoise1((jo*0.7 + dpos*0.9)/(34*o.k), M.cfg.seed+7);
+        const breathe = (0.72 + 0.55*vnoise1((jo*0.7 + dpos*0.9)/(34*o.k), M.cfg.seed+7))
+                      * (0.80 + 0.55*frac);
         o.pen.line(x1, y1, x2, y2, alpha*o.a*breathe, wgt);
         dpos += dl + gpost;
       }
@@ -396,48 +398,42 @@ function drawTreeband(g, cfg){
 /* ------------------------------------------------------------------ *
  *  Static scene: dashed grid, ranges, logo
  * ------------------------------------------------------------------ */
-// composition, normalised to the design box; mSpan slices it for narrow layouts
+// composition, normalised to the design box; mSpan slices it for narrow layouts.
+// Each layer is a dense generated row of narrow, sharp peaks; the skyline row
+// carries one dominant summit right of centre.
 const PEAK_LAYERS = [
-  { a:.34, k:.80, peaks:[   // far haze
-    {px:.05,ph:.30,pw:.145,spurs:3,dip:16,jag:26,by:1.00},
-    {px:.24,ph:.36,pw:.16, spurs:3,dip:16,jag:30,by:1.00},
-    {px:.44,ph:.32,pw:.15, spurs:3,dip:16,jag:26,by:1.00},
-    {px:.62,ph:.40,pw:.17, spurs:3,dip:16,jag:32,by:1.00},
-    {px:.82,ph:.34,pw:.15, spurs:3,dip:16,jag:28,by:1.00},
-    {px:.98,ph:.30,pw:.14, spurs:3,dip:16,jag:26,by:1.00}]},
-  { a:.72, k:.92, peaks:[   // main skyline
-    {px:.13,ph:.44,pw:.20, spurs:4,dip:26,jag:44,by:1.02},
-    {px:.33,ph:.38,pw:.18, spurs:4,dip:24,jag:40,by:1.02},
-    {px:.52,ph:.47,pw:.21, spurs:5,dip:26,jag:46,by:1.02},
-    {px:.70,ph:.58,pw:.24, spurs:5,dip:30,jag:54,by:1.02},   // the tall one
-    {px:.90,ph:.42,pw:.19, spurs:4,dip:24,jag:42,by:1.02}]},
-  { a:.90, k:1.0, peaks:[   // mid
-    {px:.02,ph:.36,pw:.21, spurs:4,dip:30,jag:44,by:1.06},
-    {px:.22,ph:.42,pw:.23, spurs:5,dip:34,jag:50,by:1.06},
-    {px:.45,ph:.33,pw:.20, spurs:4,dip:30,jag:42,by:1.06},
-    {px:.67,ph:.38,pw:.22, spurs:5,dip:34,jag:48,by:1.06},
-    {px:.88,ph:.44,pw:.23, spurs:5,dip:34,jag:50,by:1.06}]},
-  { a:1.0, k:1.12, peaks:[  // foreground shoulders
-    {px:-.02,ph:.34,pw:.26, spurs:5,dip:40,jag:52,by:1.12},
-    {px:.20,ph:.27,pw:.22, spurs:4,dip:36,jag:44,by:1.12},
-    {px:.55,ph:.22,pw:.24, spurs:4,dip:36,jag:40,by:1.14},
-    {px:.83,ph:.30,pw:.26, spurs:5,dip:40,jag:48,by:1.12},
-    {px:1.03,ph:.36,pw:.24,spurs:5,dip:40,jag:50,by:1.12}]},
+  {a:.42, k:.70, by:1.00, n:12, ph:[.22,.36], pw:[.050,.085], spurs:3, dip:14, jag:34, seed:900},
+  {a:.78, k:.84, by:1.03, n:11, ph:[.30,.52], pw:[.058,.098], spurs:4, dip:22, jag:48, seed:910,
+   hero:{px:.68, ph:.64, pw:.115}},
+  {a:.94, k:.94, by:1.07, n:11, ph:[.26,.46], pw:[.058,.098], spurs:4, dip:28, jag:50, seed:920},
+  {a:1.0, k:1.05, by:1.125, n:10, ph:[.20,.38], pw:[.066,.110], spurs:5, dip:34, jag:52, seed:930},
 ];
 
 function drawPeaks(g){
   const kx = DW/(1795*(L.mSpan||1));    // world scale for this layout
-  let seed = 101;
   for(const layer of PEAK_LAYERS){
     const o = { a:layer.a, k:layer.k*kx, pen:new Pen(g) };
-    for(const P of layer.peaks){
+    const rngL = mulberry32(layer.seed);
+    const RL = (lo,hi)=>lo+(hi-lo)*rngL();
+    const peaks = [];
+    for(let i=0;i<layer.n;i++){
+      const px = -0.06 + 1.12*(i + 0.5)/layer.n + RL(-0.35,0.35)/layer.n;
+      peaks.push({px,
+        ph:RL(layer.ph[0], layer.ph[1]),
+        pw:RL(layer.pw[0], layer.pw[1]),
+        seed:layer.seed + i*13});
+    }
+    if(layer.hero) peaks.push({...layer.hero, seed:layer.seed + 777});
+    // shorter peaks first, so the big ones read in front of their neighbours
+    peaks.sort((p,q) => p.ph - q.ph);
+    for(const P of peaks){
       const M = buildMountain({
         ax:(P.px - 0.5)*1795*kx + DW/2,
-        ay:DH*P.by - P.ph*1125*kx,
+        ay:DH*layer.by - P.ph*1125*kx,
         w: P.pw*1795*kx,
-        by:DH*P.by,
-        dip:P.dip*kx, jag:P.jag*kx,
-        spurs:P.spurs, seed:(seed += 13)
+        by:DH*layer.by,
+        dip:layer.dip*kx, jag:layer.jag*kx,
+        spurs:layer.spurs, seed:P.seed
       });
       drawMountain(g, M, o);
     }
@@ -566,9 +562,9 @@ function buildMask(){
     for(let i=0;i<MW;i++){
       const xn = i/(MW-1);
       // clumps (drifting, low frequency) + per-cell grit
-      const chunk = vnoise2(i/50, j/50, 4);      // whole pieces let go together
-      const grain = vnoise2(i/16, j/16, 9);      // then break into smaller bits
-      const n = chunk*0.40 + grain*0.30 + nr()*0.30;
+      const chunk = vnoise2(i/24, j/24, 4);      // small clusters let go together
+      const grain = vnoise2(i/7,  j/7,  9);      // then crumble to sand
+      const n = chunk*0.30 + grain*0.34 + nr()*0.36;
       thr[i+j*MW] = xn*(1-EDGE) + n*EDGE;
     }
   }
@@ -601,7 +597,7 @@ function paintMask(p){
  *  Flecks along the live edge
  * ------------------------------------------------------------------ */
 function spawn(p, speed, dir){
-  const want = Math.min(70, Math.round(Math.abs(speed)*2300));
+  const want = Math.min(150, Math.round(Math.abs(speed)*4200));
   if(want <= 0) return;
   const lo = Math.max(0, Math.floor((p - EDGE*1.1)*MW));
   const hi = Math.min(MW-1, Math.ceil((p + EDGE*0.6)*MW));
@@ -613,22 +609,22 @@ function spawn(p, speed, dir){
     const j = (Math.random()*MH)|0;
     const k = i + j*MW;
     if(ink[k] < 0.16) continue;
-    if(Math.abs(thr[k] - p) > 0.042) continue;
+    if(Math.abs(thr[k] - p) > 0.03) continue;
     made++;
-    const life = rr(0.34, 0.95);
+    const life = rr(0.22, 0.70);
     parts.push({
       x:(i + Math.random())*CELL,
       y:(j + Math.random())*CELL,
-      vx: rr(6, 62) + Math.abs(speed)*140,
-      vy: rr(-34, 20),
+      vx: rr(4, 44) + Math.abs(speed)*90,
+      vy: rr(-22, 14),
       rot: rr(-1, 1),
-      len: rr(3.2, 11),
-      w: rr(1.1, 2.6),
+      len: rr(1.6, 5.5),
+      w: rr(0.7, 1.7),
       a: rr(0.55, 1.0) * (0.45 + ink[k]),
       t: 0, life
     });
   }
-  if(parts.length > 1600) parts.splice(0, parts.length-1600);
+  if(parts.length > 2400) parts.splice(0, parts.length-2400);
 }
 
 function stepParts(dt){
