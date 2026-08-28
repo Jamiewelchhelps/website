@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QED — Particle Dissolve Footer</title>
+<style>
+  :root{
+    --paper:#f4f2ed;
+    --ink:#1a1a18;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:system-ui,-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    overflow:hidden;
+  }
+  #stagewrap{
+    position:fixed; inset:0;
+    background:var(--paper);
+  }
+  #stage{display:block; width:100%; height:100%;}
+  /* transparent, keyboard-reachable hit targets aligned to the canvas text */
+  #hits{position:absolute; inset:0;}
+  #hits a{
+    position:absolute; display:block;
+    text-indent:-9999px; overflow:hidden; white-space:nowrap;
+    border:0; outline:0; cursor:pointer;
+  }
+  #hits a:focus-visible{outline:0}
+  #replay{
+    position:absolute; right:18px; bottom:14px;
+    font:500 11px/1 system-ui,sans-serif; letter-spacing:.14em; text-transform:uppercase;
+    color:#8b8880; background:transparent; border:0; padding:8px 10px; cursor:pointer;
+    opacity:.55; transition:opacity .25s ease;
+  }
+  #replay:hover,#replay:focus-visible{opacity:1; color:var(--ink)}
+  @media (prefers-reduced-motion: reduce){ #replay{display:none} }
+</style>
+</head>
+<body>
+<div id="stagewrap">
+  <canvas id="stage"></canvas>
+  <div id="hits"></div>
+  <button id="replay" type="button">Replay</button>
+</div>
+<script>
+(() => {
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ *  QED — particle dissolve footer
+ *  Everything (grid, mountains, logo, type) is rendered to canvas in a
+ *  fixed "design space", then revealed / eroded through a noisy
+ *  horizontal threshold mask. Flecks are spawned along the live edge.
+ * ------------------------------------------------------------------ */
+
+let DW = 1795, DH = 1125;            // design space (set by the active layout)
+const PAPER = '#f4f2ed';
+const GRID  = 'rgba(160,156,146,.55)';
+const HEAD  = '#1b1b19';
+const MUTED = '#5c5b56';
+const CELL  = 3;                      // mask cell size, css px -> fleck grain
+const EDGE  = 0.215;                  // width of the dissolve band (0..1 of W)
+const RAMP  = 0.030;                  // per-cell fade so cells don't hard-pop
+
+const FONT  = 'system-ui,-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif';
+
+const prefersStill = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const params = new URLSearchParams(location.search);
+const FREEZE = params.has('t') ? parseFloat(params.get('t')) : null;
+
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+const hits = document.getElementById('hits');
+
+let W = 0, H = 0, DPR = 1, S = 1, offX = 0, offY = 0;
+let scene, sctx;                      // static art (grid + mountains + logo)
+let maskCv, mctx, maskImg;            // low-res dissolve mask
+let MW = 0, MH = 0;
+let thr, ink;                         // threshold field + ink density
+let parts = [];
+
+/* -------------------------- tiny deterministic rng ---------------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rnd = mulberry32(20260828);
+function rr(a,b){return a+(b-a)*rnd()}
+
+function hash1(n,s){const x=Math.sin(n*127.1+s*311.7)*43758.5453;return x-Math.floor(x)}
+function vnoise1(x,s){const i=Math.floor(x),f=x-i,u=f*f*(3-2*f);return hash1(i,s)*(1-u)+hash1(i+1,s)*u}
+function fbm1(x,s,oct){oct=oct||5;let a=.5,sum=0,f=1;for(let o=0;o<oct;o++){sum+=a*vnoise1(x*f,s+o*17);f*=2.03;a*=.5}return sum}
+function hash2(i,j,s){const x=Math.sin(i*127.1+j*311.7+s*74.7)*43758.5453;return x-Math.floor(x)}
+function vnoise2(x,y,s){
+  const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j;
+  const ux=fx*fx*(3-2*fx), uy=fy*fy*(3-2*fy);
+  const a=hash2(i,j,s),b=hash2(i+1,j,s),c=hash2(i,j+1,s),d=hash2(i+1,j+1,s);
+  return (a*(1-ux)+b*ux)*(1-uy)+(c*(1-ux)+d*ux)*uy;
+}
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const smooth=t=>t*t*(3-2*t);
+
+/* --------------------------- footer content ----------------------- */
+const COLS = [
+  {title:'Product',   items:['Platform','Solutions','Security']},
+  {title:'Company',   items:['About','Careers','Contact']},
+  {title:'Resources', items:['Research','Documentation','Blog']},
+];
+const LAYOUTS = {
+  // desktop: logo + three link columns across four grid cells
+  wide: {
+    DW:1795, DH:1125, mScale:1,
+    gx:[80,485,895,1305,1710], gy:80,
+    logoCX:282.5, logoCY:186, markS:57, wordF:62, wordGap:22,
+    tagF:20, tagY:[261,288], copyY:342,
+    colCX:[690,1100,1507.5], headY:185, itemY:231, itemDY:49,
+    headF:26, itemF:21, tick:20, tickLen:11
+  },
+  // portrait / small screens: logo stacked above three tighter columns
+  narrow: {
+    DW:820, DH:1400, mScale:0.72,
+    gx:[30,283,537,790], gy:60,
+    logoCX:410, logoCY:172, markS:60, wordF:64, wordGap:20,
+    tagF:22, tagY:[258,288], copyY:348,
+    colCX:[156.7,410,663.3], headY:452, itemY:502, itemDY:52,
+    headF:25, itemF:20, tick:13, tickLen:8
+  }
+};
+let L = LAYOUTS.wide;
+
+// live hover/focus state, one eased value per link
+const links = [];
+COLS.forEach((c,ci)=>c.items.forEach((label,ii)=>{
+  links.push({label, ci, ii, h:0, target:0, x:0, y:0, w:0});
+}));
+function applyLayout(name){
+  L = LAYOUTS[name];
+  DW = L.DW; DH = L.DH;
+  for(const k of links){ k.x = L.colCX[k.ci]; k.y = L.itemY + k.ii*L.itemDY; }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Pen-and-ink mountain engraving
+ * ------------------------------------------------------------------ */
+
+// batches short strokes so the whole range is a handful of stroke() calls
+function Pen(g){
+  this.g = g; this.buckets = new Map();
+}
+Pen.prototype.line = function(x1,y1,x2,y2,alpha,width){
+  const a = Math.round(clamp(alpha,0,1)*10)/10;
+  const w = Math.round(width*10)/10;
+  const k = a+'|'+w;
+  let b = this.buckets.get(k);
+  if(!b){ b = {a:a, w:w, p:new Path2D()}; this.buckets.set(k,b); }
+  b.p.moveTo(x1,y1); b.p.lineTo(x2,y2);
+};
+Pen.prototype.flush = function(){
+  const g = this.g;
+  g.lineCap = 'round';
+  for(const b of this.buckets.values()){
+    if(b.a <= 0.02) continue;
+    g.strokeStyle = 'rgba(26,26,24,'+b.a+')';
+    g.lineWidth = b.w;
+    g.stroke(b.p);
+  }
+  this.buckets.clear();
+};
+
+// silhouette as a height array across the design width (+ bleed)
+const BLEED = 0.145;                        // fraction of the design width
+function makeRidge(cfg){
+  const N = 1400;
+  const bl = BLEED*DW;
+  const x0 = -bl, x1 = DW + bl;
+  const kx = cfg.kx || 1;
+  const ys = new Float32Array(N);
+  let maxH = 1;
+  for(const p of cfg.peaks) maxH = Math.max(maxH, cfg.base - p.y);
+  for(let i=0;i<N;i++){
+    const x = x0 + (x1-x0)*i/(N-1);
+    let h = 0;
+    for(const p of cfg.peaks){
+      const t = (x - p.x)/p.w;
+      const a = 1 - Math.abs(t);
+      if(a > 0) h = Math.max(h, (cfg.base - p.y) * Math.pow(a, p.s||1.5));
+    }
+    // secondary shoulders + saddles
+    h += cfg.detail * (fbm1(x/(230*kx), cfg.seed) - .38) * (0.30 + 0.85*h/maxH);
+    // jagged summit noise, strongest up high
+    const rel = clamp(h/maxH, 0, 1);
+    h += cfg.jag * (fbm1(x/(26*kx), cfg.seed+41, 3) - .5) * Math.pow(rel, 1.5);
+    h += cfg.jag * 0.45 * (fbm1(x/(9*kx), cfg.seed+77, 2) - .5) * Math.pow(rel, 2.2);
+    ys[i] = cfg.base - Math.max(h, 0);
+  }
+  return {ys, x0, x1, N, base:cfg.base, cfg};
+}
+function ridgeY(r, x){
+  const t = clamp((x - r.x0)/(r.x1 - r.x0), 0, 1) * (r.N-1);
+  const i = Math.floor(t), f = t - i;
+  const a = r.ys[i], b = r.ys[Math.min(i+1, r.N-1)];
+  return a + (b-a)*f;
+}
+function ridgeSlope(r, x){
+  const d = 7*(r.cfg.kx||1);
+  return (ridgeY(r, x+d) - ridgeY(r, x-d)) / (2*d);
+}
+
+function drawRidge(g, r, o){
+  const pen = new Pen(g);
+  const kx = o.kx || 1, kv = o.kv || 1;
+  const bottom = DH*1.151;
+
+  // 1. opaque fill so this range occludes everything behind it
+  g.beginPath();
+  g.moveTo(r.x0, bottom);
+  for(let x = r.x0; x <= r.x1; x += 3*kx) g.lineTo(x, ridgeY(r,x));
+  g.lineTo(r.x1, bottom);
+  g.closePath();
+  g.fillStyle = PAPER;
+  g.fill();
+
+  g.save();
+  g.clip();                                   // keep all shading inside the range
+
+  // 2. crest line, redrawn with a slight hand wobble
+  g.beginPath();
+  for(let x = r.x0; x <= r.x1; x += 2*kx){
+    const y = ridgeY(r,x) + (vnoise1(x/(6*kx), r.cfg.seed+3)-.5)*o.wob;
+    if(x === r.x0) g.moveTo(x,y); else g.lineTo(x,y);
+  }
+  g.strokeStyle = 'rgba(26,26,24,'+o.crest+')';
+  g.lineWidth = o.crestW;
+  g.lineJoin = 'round';
+  g.stroke();
+
+  // 3. fall-line hatching: broken lines running downslope from the crest.
+  //    Density comes from the facing (light from upper-left) so right-hand
+  //    faces go dark and left-hand faces stay as bare snow.
+  for(let x = r.x0; x < r.x1; x += o.hatchX){
+    const top = ridgeY(r, x);
+    if(top > bottom) continue;
+    const slope = ridgeSlope(r, x);
+    const shade = clamp(0.5 + slope*0.95, 0, 1);
+    const dirx  = clamp(slope, -2.6, 2.6) * 0.40;
+    let px = x + rr(-o.hatchX*0.5, o.hatchX*0.5);
+    let py = top + rr(1, 6)*kv;
+    const step = o.hatchY;
+    while(py < bottom){
+      const d = py - top;
+      const depth = clamp(d/(620*kv), 0, 1);
+      let dens = (0.30 + shade*0.92) * (1 - 0.42*Math.pow(depth, 1.5)) * o.dens;
+      if(shade < 0.34 && d < (80 + 110*(0.34-shade)/0.34)*kv) dens *= 0.20;   // snowfield
+      dens *= 0.72 + 0.56*vnoise1((x*0.55 + d*1.7)/(24*kx), r.cfg.seed+5);      // strata banding
+      const nx = px + dirx*step + (vnoise1((px + d)/(12*kx), r.cfg.seed+13)-.5)*2.6*kx;
+      const ny = py + step;
+      // smooth mark noise groups the steps into dashes instead of one long comb
+      const mark = vnoise1((d*1.75 + x*0.37)/(8.5*kv), r.cfg.seed+61);
+      if(mark < dens*0.92){
+        const a = o.hatch*(0.36 + 0.9*clamp(dens,0,1));
+        pen.line(px, py, nx, ny, a, o.hatchW);
+        // cross strokes where the face is deepest in shadow
+        if(dens > 0.72 && rnd() < 0.13){
+          const cl = rr(3, 9)*kx;
+          pen.line(px, py, px + cl, py - cl*0.35, a*0.7, o.hatchW*0.85);
+        }
+      }
+      px = nx; py = ny;
+    }
+  }
+
+  // 4. spurs — the darker creases that give each face its structure
+  for(let x = r.x0; x < r.x1; x += o.spurGap){
+    const sx = x + rr(-o.spurGap*0.45, o.spurGap*0.45);
+    const top = ridgeY(r, sx);
+    if(top > bottom - 60*kv) continue;
+    const slope = ridgeSlope(r, sx);
+    const len = rr(o.spurLen*0.25, o.spurLen*0.62) * (0.55 + clamp((r.base-top)/(560*kv), 0, 1));
+    let px = sx, py = top + rr(2, 14)*kv, dx = clamp(slope, -2.4, 2.4)*0.44;
+    const steps = Math.max(3, Math.round(len/(8*kv)));
+    const a = rr(o.spur*0.55, o.spur);
+    for(let k=0;k<steps;k++){
+      const nx = px + dx*8*kv + (vnoise1((px + k*11)/(15*kx), r.cfg.seed+9)-.5)*3.4*kx;
+      const ny = py + 8*kv;
+      if(ny > bottom) break;
+      if(vnoise1((k*8 + sx*0.3)/(11*kx), r.cfg.seed+91) < 0.74)
+        pen.line(px, py, nx, ny, a*(1 - k/steps*0.6), o.spurW);
+      px = nx; py = ny; dx *= 0.985;
+    }
+  }
+
+  // 5. short cliff striations on the steepest ground
+  for(let x = r.x0; x < r.x1; x += o.cliffGap){
+    const slope = ridgeSlope(r, x);
+    if(Math.abs(slope) < 0.7) continue;
+    const top = ridgeY(r, x) + rr(40, 210)*kv;
+    const h = rr(28, 90)*kv;
+    const n = Math.round(rr(5, 13));
+    for(let k=0;k<n;k++){
+      const cx = x + rr(-o.cliffGap*0.45, o.cliffGap*0.45);
+      let py = top + rr(-14,14)*kv, px = cx;
+      const segs = Math.max(2, Math.round(h/(11*kv)));
+      const a = rr(o.hatch*0.7, o.hatch*1.4);
+      for(let m=0;m<segs;m++){
+        const ny = py + 11*kv, nx = px + (vnoise1((py + k*7)/(19*kx), r.cfg.seed+33)-.5)*3*kx + clamp(slope,-1,1)*1.1*kx;
+        if(ny > bottom) break;
+        pen.line(px, py, nx, ny, a, o.hatchW*1.05);
+        px = nx; py = ny;
+      }
+    }
+  }
+
+  // 6. a few contour flicks parallel to the crest, for the snowy faces
+  for(let x = r.x0; x < r.x1; x += 9*kx){
+    const top = ridgeY(r, x);
+    const slope = ridgeSlope(r, x);
+    const shade = clamp(0.5 + slope*0.95, 0, 1);
+    if(shade > 0.42) continue;
+    if(rnd() > 0.30) continue;
+    const d = rr(14, 190)*kv;
+    const y = top + d;
+    if(y > bottom) continue;
+    const l = rr(5, 17)*kx;
+    pen.line(x, y, x + l, y + l*clamp(slope,-1.6,1.6)*0.55, o.hatch*rr(0.35,0.8), o.hatchW*0.9);
+  }
+
+  pen.flush();
+  g.restore();
+}
+
+function drawConifer(g, x, y, h, alpha){
+  const w = h*0.34;
+  g.beginPath();
+  g.moveTo(x, y - h);
+  let side = 1, py = y - h, pw = 0;
+  const tiers = Math.max(4, Math.round(h/9));
+  // right edge down
+  for(let i=1;i<=tiers;i++){
+    const t = i/tiers;
+    const cw = w*Math.pow(t,0.85);
+    const cy = y - h + h*t;
+    g.lineTo(x + cw*rr(.75,1.05), cy - h/tiers*0.35);
+    g.lineTo(x + cw*rr(.45,.7),  cy);
+  }
+  g.lineTo(x + w*0.10, y);
+  g.lineTo(x - w*0.10, y);
+  // left edge up
+  for(let i=tiers;i>=1;i--){
+    const t = i/tiers;
+    const cw = w*Math.pow(t,0.85);
+    const cy = y - h + h*t;
+    g.lineTo(x - cw*rr(.45,.7), cy);
+    g.lineTo(x - cw*rr(.75,1.05), cy - h/tiers*0.35);
+  }
+  g.closePath();
+  g.fillStyle = 'rgba(26,26,24,'+alpha+')';
+  g.fill();
+}
+
+function drawTreeband(g, cfg){
+  const trees = [];
+  for(let i=0;i<cfg.count;i++){
+    const t = Math.pow(rnd(), cfg.bias||1);
+    const x = cfg.x0 + (cfg.x1-cfg.x0)*t;
+    // density decays away from the anchored corner
+    const edge = cfg.bias > 1 ? 1 - t : t;
+    const y = rr(cfg.y0, cfg.y1) - edge*edge*(cfg.fade||70);
+    const depth = clamp((y - cfg.y0)/(cfg.y1 - cfg.y0), 0, 1);
+    const h = cfg.h0 + (cfg.h1-cfg.h0)*Math.pow(depth, 0.7)*rr(0.55, 1.3);
+    trees.push({x, y, h, a: 0.34 + 0.62*depth*rr(0.75,1.2)});
+  }
+  trees.sort((p,q) => p.y - q.y);              // painter's order, far trees first
+  for(const t of trees) drawConifer(g, t.x, t.y, t.h, clamp(t.a, 0.22, 0.95));
+}
+
+/* ------------------------------------------------------------------ *
+ *  Static scene: dashed grid, ranges, logo
+ * ------------------------------------------------------------------ */
+// ranges are stored normalised (fractions of the design box) so the same
+// art re-fits itself to the wide and narrow layouts
+const RANGE_SPECS = [
+  {baseOff:0.1244, seed:11, detail:0.1200, jag:0.0516,
+   peaks:[{px:-0.0223,pw:0.3454,ph:0.5022,s:0.95},
+          {px:0.2228,pw:0.2897,ph:0.4711,s:0.9},
+          {px:0.4568,pw:0.3565,ph:0.5271,s:0.85},
+          {px:0.6964,pw:0.3343,ph:0.5556,s:0.85},
+          {px:0.9025,pw:0.3565,ph:0.5804,s:0.9},
+          {px:1.1031,pw:0.3120,ph:0.5111,s:0.95}],
+   o:{crest:.38, crestW:1.0, wob:2.4, spur:.20, spurW:.8, spurGap:44, spurLen:180, hatchX:4.2, hatchY:8.5, hatch:.24, hatchW:.8, dens:.52, cliffGap:190}},
+  {baseOff:0.1244, seed:29, detail:0.1422, jag:0.0764,
+   peaks:[{px:0.0334,pw:0.2897,ph:0.5502,s:0.9},
+          {px:0.1961,pw:0.2618,ph:0.6089,s:0.82},
+          {px:0.3120,pw:0.2396,ph:0.5467,s:0.9},
+          {px:0.4457,pw:0.2618,ph:0.5111,s:0.95},
+          {px:0.5627,pw:0.2507,ph:0.5911,s:0.85},
+          {px:0.6407,pw:0.2340,ph:0.6284,s:0.8},
+          {px:0.7532,pw:0.2897,ph:0.6996,s:0.78},
+          {px:0.8802,pw:0.2618,ph:0.5947,s:0.88},
+          {px:1.0362,pw:0.2897,ph:0.5449,s:0.95}],
+   o:{crest:.70, crestW:1.2, wob:3.0, spur:.38, spurW:.9, spurGap:30, spurLen:300, hatchX:3.6, hatchY:7.4, hatch:.36, hatchW:.85, dens:.80, cliffGap:130}},
+  {baseOff:0.1244, seed:53, detail:0.1244, jag:0.0587,
+   peaks:[{px:0.1003,pw:0.2897,ph:0.4596,s:0.88},
+          {px:0.3148,pw:0.2786,ph:0.5004,s:0.85},
+          {px:0.5014,pw:0.2897,ph:0.4258,s:0.95},
+          {px:0.6574,pw:0.2674,ph:0.4827,s:0.86},
+          {px:0.8022,pw:0.3120,ph:0.5129,s:0.84},
+          {px:1.0028,pw:0.2897,ph:0.4542,s:0.92}],
+   o:{crest:.80, crestW:1.3, wob:3.2, spur:.44, spurW:1.0, spurGap:26, spurLen:330, hatchX:3.3, hatchY:7.0, hatch:.42, hatchW:.9, dens:.90, cliffGap:112}},
+  {baseOff:0.1422, seed:71, detail:0.1067, jag:0.0444,
+   peaks:[{px:0.0223,pw:0.3120,ph:0.3493,s:0.92},
+          {px:0.2396,pw:0.3008,ph:0.4062,s:0.86},
+          {px:0.4401,pw:0.3120,ph:0.3369,s:0.95},
+          {px:0.6184,pw:0.2897,ph:0.3849,s:0.88},
+          {px:0.7911,pw:0.3343,ph:0.4151,s:0.86},
+          {px:1.0139,pw:0.3120,ph:0.3600,s:0.94}],
+   o:{crest:.88, crestW:1.45, wob:3.4, spur:.50, spurW:1.05, spurGap:23, spurLen:340, hatchX:3.1, hatchY:6.7, hatch:.48, hatchW:.95, dens:.98, cliffGap:100}},
+];
+
+function rangesFor(){
+  const kx = DW/1795;                      // horizontal re-fit
+  const kv = (DH*L.mScale)/1125;           // vertical re-fit
+  return RANGE_SPECS.map(R => {
+    const base = DH + R.baseOff*DH;
+    const o = Object.assign({}, R.o, {kx, kv,
+      crestW:R.o.crestW*kx, wob:R.o.wob*kv, spurW:R.o.spurW*kx,
+      spurGap:R.o.spurGap*kx, spurLen:R.o.spurLen*kv,
+      hatchX:R.o.hatchX*kx, hatchY:R.o.hatchY*kv,
+      hatchW:R.o.hatchW*kx, cliffGap:R.o.cliffGap*kx});
+    const cfg = {
+      base, seed:R.seed, kx, kv,
+      detail:R.detail*DH*L.mScale, jag:R.jag*DH*L.mScale,
+      peaks:R.peaks.map(q => ({x:q.px*DW, w:q.pw*DW, y:base - q.ph*DH*L.mScale, s:q.s}))
+    };
+    return {cfg, o};
+  });
+}
+
+function drawGrid(g){
+  g.save();
+  g.strokeStyle = GRID;
+  g.lineWidth = 1;
+  g.setLineDash([7,7]);
+  g.beginPath();
+  g.moveTo(L.gx[0] - 0.039*DW, L.gy);
+  g.lineTo(L.gx[L.gx.length-1] + 0.005*DW, L.gy);
+  g.stroke();
+  g.beginPath();
+  for(const x of L.gx){ g.moveTo(x, L.gy); g.lineTo(x, DH*1.124); }
+  g.stroke();
+  g.restore();
+}
+
+function drawLogo(g){
+  const cx = L.logoCX, cy = L.logoCY, markS = L.markS, gap = L.wordGap;
+  g.save();
+  g.font = '700 '+L.wordF+'px '+FONT;
+  if('letterSpacing' in g) g.letterSpacing = (-L.wordF/41).toFixed(2)+'px';
+  const word = 'QED';
+  const wW = g.measureText(word).width;
+  const left = cx - (markS + gap + wW)/2;
+  // mark
+  g.fillStyle = HEAD;
+  g.fillRect(left, cy - markS/2, markS, markS);
+  g.fillStyle = PAPER;
+  g.fillRect(left + markS*0.30, cy - markS*0.20, markS*0.40, markS*0.40);
+  // wordmark
+  g.fillStyle = HEAD;
+  g.textAlign = 'left';
+  g.textBaseline = 'alphabetic';
+  g.fillText(word, left + markS + gap, cy + L.wordF*0.355);
+  if('letterSpacing' in g) g.letterSpacing = '0px';
+
+  // tagline + copyright
+  g.textAlign = 'center';
+  g.fillStyle = MUTED;
+  g.font = '400 '+L.tagF+'px '+FONT;
+  g.fillText('The deterministic layer for', cx, L.tagY[0]);
+  g.fillText('enterprise AI', cx, L.tagY[1]);
+  g.fillText('© 2026 QED Labs, Inc.', cx, L.copyY);
+  g.restore();
+}
+
+function buildScene(){
+  const g = sctx;
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0,0,scene.width,scene.height);
+  g.setTransform(S*DPR,0,0,S*DPR, offX*DPR, offY*DPR);
+  rnd = mulberry32(20260828);
+  drawGrid(g);
+  for(const R of rangesFor()) drawRidge(g, makeRidge(R.cfg), R.o);
+  // foreground treeline hugging the bottom edge, dense at the outer corners
+  const tk = (DH*L.mScale)/1125;
+  for(const b of [
+    {x0:-0.134, x1:0.390, count:520, y0:0.853, y1:1.080, h0:16, h1:74, bias:2.6},
+    {x0: 0.602, x1:1.148, count:560, y0:0.853, y1:1.080, h0:16, h1:74, bias:0.38},
+    {x0: 0.345, x1:0.669, count:120, y0:0.915, y1:1.071, h0:12, h1:38, bias:1}
+  ]) drawTreeband(g, {
+    x0:b.x0*DW, x1:b.x1*DW, count:b.count, bias:b.bias,
+    y0:DH*1.151 - (1.151-b.y0)*1125*tk,
+    y1:DH*1.151 - (1.151-b.y1)*1125*tk,
+    h0:b.h0*tk, h1:b.h1*tk, fade:70*tk
+  });
+  drawLogo(g);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Type (drawn every frame so hover states stay live)
+ * ------------------------------------------------------------------ */
+function drawType(g, live){
+  g.save();
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  COLS.forEach((c, ci) => {
+    g.fillStyle = HEAD;
+    g.font = '500 '+L.headF+'px '+FONT;
+    g.fillText(c.title, L.colCX[ci], L.headY);
+  });
+  g.font = '400 '+L.itemF+'px '+FONT;
+  for(const it of links){
+    const h = live ? it.h : 0;
+    const y = it.y;
+    it.w = g.measureText(it.label).width;
+    // colour lifts from muted to ink on hover
+    g.fillStyle = h > 0.01
+      ? 'rgb('+Math.round(92-74*h)+','+Math.round(91-73*h)+','+Math.round(86-68*h)+')'
+      : MUTED;
+    g.fillText(it.label, it.x, y);
+    if(h > 0.01){
+      const half = it.w/2, uy = y + L.itemF*0.36;
+      g.strokeStyle = 'rgba(26,26,24,'+(0.85*h)+')';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(it.x - half, uy);
+      g.lineTo(it.x - half + it.w*h, uy);
+      g.stroke();
+      // leading tick
+      g.beginPath();
+      g.moveTo(it.x - half - L.tick, y - L.itemF*0.29);
+      g.lineTo(it.x - half - L.tick + L.tickLen*h, y - L.itemF*0.29);
+      g.stroke();
+    }
+  }
+  g.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Dissolve mask + ink map
+ * ------------------------------------------------------------------ */
+function buildMask(){
+  MW = Math.max(2, Math.ceil(W/CELL));
+  MH = Math.max(2, Math.ceil(H/CELL));
+  maskCv.width = MW; maskCv.height = MH;
+  maskImg = mctx.createImageData(MW, MH);
+  thr = new Float32Array(MW*MH);
+  const nr = mulberry32(913371);
+  for(let j=0;j<MH;j++){
+    for(let i=0;i<MW;i++){
+      const xn = i/(MW-1);
+      // clumps (drifting, low frequency) + per-cell grit
+      const clump = vnoise2(i/13, j/13, 4) * 0.55 + vnoise2(i/4.5, j/4.5, 9) * 0.45;
+      const n = clump*0.62 + nr()*0.38;
+      thr[i+j*MW] = xn*(1-EDGE) + n*EDGE;
+    }
+  }
+  // ink density (for spawning flecks only where there is art)
+  const tmp = document.createElement('canvas');
+  tmp.width = MW; tmp.height = MH;
+  const tg = tmp.getContext('2d', {willReadFrequently:true});
+  tg.fillStyle = PAPER; tg.fillRect(0,0,MW,MH);
+  tg.drawImage(scene, 0,0, MW, MH);
+  tg.setTransform(S/CELL, 0, 0, S/CELL, offX/CELL, offY/CELL);
+  drawType(tg, false);
+  const d = tg.getImageData(0,0,MW,MH).data;
+  ink = new Float32Array(MW*MH);
+  for(let k=0;k<MW*MH;k++){
+    const lum = (d[k*4]*0.3 + d[k*4+1]*0.59 + d[k*4+2]*0.11);
+    ink[k] = clamp((236 - lum)/150, 0, 1);
+  }
+}
+
+function paintMask(p){
+  const px = maskImg.data;
+  for(let k=0, n=MW*MH; k<n; k++){
+    const a = (p - thr[k]) / RAMP;
+    px[k*4+3] = a <= 0 ? 0 : a >= 1 ? 255 : (a*255)|0;
+  }
+  mctx.putImageData(maskImg, 0, 0);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Flecks along the live edge
+ * ------------------------------------------------------------------ */
+function spawn(p, speed, dir){
+  const want = Math.min(64, Math.round(Math.abs(speed)*1900));
+  if(want <= 0) return;
+  const lo = Math.max(0, Math.floor((p - EDGE*1.1)*MW));
+  const hi = Math.min(MW-1, Math.ceil((p + EDGE*0.6)*MW));
+  if(hi <= lo) return;
+  let made = 0, tries = 0;
+  while(made < want && tries < want*14){
+    tries++;
+    const i = lo + ((Math.random()*(hi-lo))|0);
+    const j = (Math.random()*MH)|0;
+    const k = i + j*MW;
+    if(ink[k] < 0.16) continue;
+    if(Math.abs(thr[k] - p) > 0.035) continue;
+    made++;
+    const life = rr(0.40, 1.15);
+    parts.push({
+      x:(i + Math.random())*CELL,
+      y:(j + Math.random())*CELL,
+      vx: rr(10, 86) + Math.abs(speed)*180,
+      vy: rr(-46, 26),
+      rot: rr(-1, 1),
+      len: rr(2.6, 8.5),
+      w: rr(1.0, 2.3),
+      a: rr(0.45, 0.95) * (0.4 + ink[k]),
+      t: 0, life
+    });
+  }
+  if(parts.length > 1400) parts.splice(0, parts.length-1400);
+}
+
+function stepParts(dt){
+  for(let k=parts.length-1;k>=0;k--){
+    const q = parts[k];
+    q.t += dt;
+    if(q.t >= q.life){ parts.splice(k,1); continue; }
+    q.x += q.vx*dt;
+    q.y += q.vy*dt;
+    q.vy += 150*dt;              // slight settle
+    q.vx *= (1 - 1.35*dt);
+    q.rot += dt*1.4;
+  }
+}
+
+function drawParts(g){
+  g.save();
+  g.lineCap = 'round';
+  for(const q of parts){
+    const f = q.t/q.life;
+    const a = q.a * (1 - f*f);
+    if(a <= 0.02) continue;
+    const dx = Math.cos(q.rot)*q.len, dy = Math.sin(q.rot)*q.len*0.55;
+    g.strokeStyle = 'rgba(26,26,24,'+a.toFixed(3)+')';
+    g.lineWidth = q.w;
+    g.beginPath();
+    g.moveTo(q.x-dx/2, q.y-dy/2);
+    g.lineTo(q.x+dx/2, q.y+dy/2);
+    g.stroke();
+  }
+  g.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Timeline
+ * ------------------------------------------------------------------ */
+const T_BUILD = 2500, T_HOLD = 3400, T_ERODE = 2000, T_GAP = 800;
+const T_TOTAL = T_BUILD + T_HOLD + T_ERODE + T_GAP;
+let clock = 0, lastP = 0;
+
+function progressAt(ms){
+  const t = ms % T_TOTAL;
+  if(t < T_BUILD) return {p: smooth(t/T_BUILD), dir: 1};
+  if(t < T_BUILD+T_HOLD) return {p: 1, dir: 0};
+  if(t < T_BUILD+T_HOLD+T_ERODE){
+    const u = (t - T_BUILD - T_HOLD)/T_ERODE;
+    return {p: 1 - smooth(u), dir: -1};
+  }
+  return {p: 0, dir: 0};
+}
+
+/* ------------------------------------------------------------------ *
+ *  Frame
+ * ------------------------------------------------------------------ */
+function frame(dt){
+  let p, dir;
+  if(FREEZE !== null){ p = clamp(FREEZE,0,1); dir = 0; }
+  else if(prefersStill){ p = 1; dir = 0; }
+  else { clock += dt*1000; const s = progressAt(clock); p = s.p; dir = s.dir; }
+
+  for(const L of links) L.h += (L.target - L.h) * Math.min(1, dt*11);
+
+  // scene + type -> masked
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(scene, 0, 0);
+  ctx.setTransform(S*DPR,0,0,S*DPR, offX*DPR, offY*DPR);
+  drawType(ctx, true);
+  ctx.setTransform(1,0,0,1,0,0);
+
+  if(p < 0.999){
+    paintMask(p);
+    ctx.globalCompositeOperation = 'destination-in';
+    // smoothing the upscale keeps the grain organic instead of pixel-blocky
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'low';
+    ctx.drawImage(maskCv, 0, 0, cv.width, cv.height);
+  }
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.globalCompositeOperation = 'source-over';
+
+  // flecks
+  const speed = (p - lastP);
+  lastP = p;
+  if(!prefersStill && FREEZE === null && dir !== 0) spawn(p, speed/Math.max(dt,0.001)*0.016, dir);
+  stepParts(dt);
+  if(parts.length){
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    drawParts(ctx);
+    ctx.setTransform(1,0,0,1,0,0);
+  }
+  // links are only clickable once they have materialised
+  hits.style.pointerEvents = p > 0.985 ? 'auto' : 'none';
+}
+
+/* ------------------------------------------------------------------ *
+ *  Layout / resize / input
+ * ------------------------------------------------------------------ */
+function buildHits(){
+  hits.innerHTML = '';
+  const probe = document.createElement('canvas').getContext('2d');
+  probe.font = '400 '+L.itemF+'px '+FONT;
+  for(const it of links){
+    const w = probe.measureText(it.label).width;
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = it.label;
+    a.setAttribute('aria-label', it.label);
+    a.style.left   = (offX + (it.x - w/2 - 10)*S) + 'px';
+    a.style.top    = (offY + (it.y - L.itemF)*S) + 'px';
+    a.style.width  = ((w + 20)*S) + 'px';
+    a.style.height = (L.itemF*1.45*S) + 'px';
+    const on  = () => { it.target = 1; };
+    const off = () => { it.target = 0; };
+    a.addEventListener('mouseenter', on);
+    a.addEventListener('mouseleave', off);
+    a.addEventListener('focus', on);
+    a.addEventListener('blur', off);
+    a.addEventListener('click', e => e.preventDefault());
+    hits.appendChild(a);
+  }
+}
+
+function resize(){
+  const r = document.getElementById('stagewrap').getBoundingClientRect();
+  W = Math.max(320, Math.round(r.width));
+  H = Math.max(240, Math.round(r.height));
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width  = Math.round(W*DPR);
+  cv.height = Math.round(H*DPR);
+  cv.style.width = W+'px';
+  cv.style.height = H+'px';
+
+  applyLayout(W < 860 || W/H < 1.15 ? 'narrow' : 'wide');
+  S = W/DW;                            // always fit the full width — never crop type
+  offX = 0;
+  // bottom-anchored so the range always meets the bottom edge; on short
+  // viewports crop from the top, but never past the grid rule
+  offY = Math.max(H - DH*S, -(L.gy - 20)*S);
+
+  if(!scene){ scene = document.createElement('canvas'); sctx = scene.getContext('2d'); }
+  scene.width = cv.width; scene.height = cv.height;
+  if(!maskCv){ maskCv = document.createElement('canvas'); mctx = maskCv.getContext('2d', {willReadFrequently:true}); }
+
+  buildScene();
+  buildMask();
+  buildHits();
+  parts.length = 0;
+}
+
+let raf = 0, prev = 0, running = true;
+function loop(ts){
+  raf = requestAnimationFrame(loop);
+  if(!prev) prev = ts;
+  const dt = Math.min(0.05, (ts - prev)/1000);
+  prev = ts;
+  if(!running) return;
+  frame(dt);
+}
+
+let rt = 0;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(resize, 180); });
+document.addEventListener('visibilitychange', () => {
+  running = !document.hidden;
+  prev = 0;
+});
+document.getElementById('replay').addEventListener('click', () => {
+  clock = 0; lastP = 0; parts.length = 0;
+});
+addEventListener('keydown', e => {
+  if(e.target !== document.body) return;
+  if(e.key === ' ' || e.key === 'Enter'){
+    e.preventDefault();
+    clock = 0; lastP = 0; parts.length = 0;
+  }
+});
+
+resize();
+if(FREEZE !== null || prefersStill){ frame(0.016); }
+raf = requestAnimationFrame(loop);
+window.__ready = true;
+})();
+</script>
+</body>
+</html>
