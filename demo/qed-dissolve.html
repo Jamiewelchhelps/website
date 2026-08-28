@@ -159,6 +159,16 @@ Pen.prototype.line = function(x1,y1,x2,y2,alpha,width){
   if(!b){ b = {a:a, w:w, p:new Path2D()}; this.buckets.set(k,b); }
   b.p.moveTo(x1,y1); b.p.lineTo(x2,y2);
 };
+Pen.prototype.flushInto = function(g){
+  g.lineCap = 'round';
+  for(const b of this.buckets.values()){
+    if(b.a <= 0.02) continue;
+    g.strokeStyle = 'rgba(26,26,24,'+b.a+')';
+    g.lineWidth = b.w;
+    g.stroke(b.p);
+  }
+  this.buckets.clear();
+};
 Pen.prototype.flush = function(){
   const g = this.g;
   g.lineCap = 'round';
@@ -171,169 +181,171 @@ Pen.prototype.flush = function(){
   this.buckets.clear();
 };
 
-// silhouette as a height array across the design width (+ bleed)
-const BLEED = 0.145;                        // fraction of the design width
-function makeRidge(cfg){
-  const N = 1400;
-  const bl = BLEED*DW;
-  const x0 = -bl, x1 = DW + bl;
-  const kx = cfg.kx || 1;
-  const ys = new Float32Array(N);
-  let maxH = 1;
-  for(const p of cfg.peaks) maxH = Math.max(maxH, cfg.base - p.y);
-  for(let i=0;i<N;i++){
-    const x = x0 + (x1-x0)*i/(N-1);
-    let h = 0;
-    for(const p of cfg.peaks){
-      const t = (x - p.x)/p.w;
-      const a = 1 - Math.abs(t);
-      if(a > 0) h = Math.max(h, (cfg.base - p.y) * Math.pow(a, p.s||1.5));
-    }
-    // secondary shoulders + saddles
-    h += cfg.detail * (fbm1(x/(230*kx), cfg.seed) - .38) * (0.30 + 0.85*h/maxH);
-    // jagged rock: ridged noise at two scales, present all the way down the flanks
-    const rel = clamp(h/maxH, 0, 1);
-    h += cfg.jag * (ridged1(x/(44*kx), cfg.seed+41, 3) - .45) * (0.35 + 0.65*rel);
-    h += cfg.jag * 0.34 * (ridged1(x/(15*kx), cfg.seed+77, 2) - .45) * Math.pow(rel, 1.3);
-    ys[i] = cfg.base - Math.max(h, 0);
+/* ------------------------------------------------------------------ *
+ *  Faceted peaks
+ *
+ *  A mountain is an apex with a fan of jagged ridge lines falling to its
+ *  base. Adjacent ridges bound a FACET — one plane of rock that is hatched
+ *  as a unit: bright snow, grey rock or near-black shadow. Hard planes
+ *  meeting at sharp aretes is what makes the range read as cut stone
+ *  instead of fuzz.
+ * ------------------------------------------------------------------ */
+
+function ridgeline(ax, ay, bx, by, seed, jag){
+  const n = 24, pts = new Array(n+1);
+  for(let i=0;i<=n;i++){
+    const t = i/n;
+    const bow = Math.pow(t, 1.22);               // concave — steep at the summit
+    let x = ax + (bx-ax)*t;
+    let y = ay + (by-ay)*bow;
+    const amp = jag * Math.pow(Math.sin(Math.min(1, t*1.06)*Math.PI), 0.6);
+    x += (ridged1(t*6.5 + seed*13.7, seed) - .45) * amp;
+    y += (vnoise1(t*13 + seed*7.1, seed+5) - .5) * amp * .8;
+    pts[i] = [x, y];
   }
-  return {ys, x0, x1, N, base:cfg.base, cfg};
-}
-function ridgeY(r, x){
-  const t = clamp((x - r.x0)/(r.x1 - r.x0), 0, 1) * (r.N-1);
-  const i = Math.floor(t), f = t - i;
-  const a = r.ys[i], b = r.ys[Math.min(i+1, r.N-1)];
-  return a + (b-a)*f;
-}
-function ridgeSlope(r, x){
-  const d = 7*(r.cfg.kx||1);
-  return (ridgeY(r, x+d) - ridgeY(r, x-d)) / (2*d);
-}
-// the face below the crest is smooth even where the crest itself is serrated,
-// so shading reads the macro form, not the summit jitter
-function ridgeSlopeWide(r, x){
-  const d = 62*(r.cfg.kx||1);
-  let a = 0, b = 0;
-  for(let k=1;k<=3;k++){ a += ridgeY(r, x - d*k/3); b += ridgeY(r, x + d*k/3); }
-  return (b - a) / (2*d*2);
+  pts[0] = [ax, ay];
+  return pts;
 }
 
-function drawRidge(g, r, o){
-  const pen = new Pen(g);
-  const kx = o.kx || 1, kv = o.kv || 1;
-  const bottom = DH*1.151;
-  const sd = r.cfg.seed;
+function buildMountain(cfg){
+  const {ax, ay, w, by, seed} = cfg;
+  const rng = mulberry32(seed*7919 + 11);
+  const R = (lo,hi)=>lo+(hi-lo)*rng();
+  const k = cfg.spurs;
+  const ridges = [];
+  for(let i=0;i<=k;i++){
+    const t = i/k;
+    const bx = ax - w + 2*w*t + R(-w*0.05, w*0.05);
+    // spurs near the centre run toward the viewer, so their feet sit lower
+    const bY = by + Math.sin(t*Math.PI)*cfg.dip + R(-10, 10);
+    const jag = cfg.jag * (0.75 + 0.7*Math.abs(t-0.5)*2);
+    ridges.push(ridgeline(ax, ay + (i===0||i===k ? 0 : R(0, 14)), bx, bY, seed + i*17, jag));
+  }
 
-  // silhouette, used for both the knock-out fill and the clip
-  const sil = new Path2D();
-  sil.moveTo(r.x0, bottom);
-  for(let x = r.x0; x <= r.x1; x += 2*kx) sil.lineTo(x, ridgeY(r,x));
-  sil.lineTo(r.x1, bottom);
-  sil.closePath();
-  g.fillStyle = PAPER;
-  g.fill(sil);
+  // facets between neighbouring ridges
+  const facets = [];
+  for(let i=0;i<k;i++){
+    const A = ridges[i], B = ridges[i+1];
+    const poly = new Path2D();
+    poly.moveTo(A[0][0], A[0][1]);
+    for(const q of A) poly.lineTo(q[0], q[1]);
+    poly.lineTo(B[B.length-1][0], B[B.length-1][1]);
+    for(let j=B.length-1;j>=0;j--) poly.lineTo(B[j][0], B[j][1]);
+    poly.closePath();
+    const mbx = (A[A.length-1][0] + B[B.length-1][0])/2;
+    const mby = (A[A.length-1][1] + B[B.length-1][1])/2;
+    facets.push({poly, mbx, mby, i});
+  }
+
+  // tone: light from the upper-left, so right-facing planes fall into shadow.
+  // Adjacent facets are pushed apart so every arete is a visible tone break.
+  for(const f of facets){
+    const dirx = clamp((f.mbx - ax)/w, -1, 1);
+    f.tone = clamp(0.52 + dirx*0.62 + R(-0.14, 0.14), 0.02, 1);
+  }
+  for(let i=1;i<facets.length;i++){
+    const d = facets[i].tone - facets[i-1].tone;
+    if(Math.abs(d) < 0.30){
+      const push = (0.30 - Math.abs(d)) * (d >= 0 ? 1 : -1);
+      facets[i].tone = clamp(facets[i].tone + push*0.8, 0.02, 1);
+      facets[i-1].tone = clamp(facets[i-1].tone - push*0.35, 0.02, 1);
+    }
+  }
+
+  // outline of the whole mass, for occlusion + the crisp skyline
+  const out = new Path2D();
+  const Lr = ridges[0], Rr = ridges[k];
+  out.moveTo(Lr[Lr.length-1][0], Lr[Lr.length-1][1]);
+  for(let j=Lr.length-1;j>=0;j--) out.lineTo(Lr[j][0], Lr[j][1]);
+  for(const q of Rr) out.lineTo(q[0], q[1]);
+  out.closePath();
+  return {cfg, ridges, facets, out, ax, ay, w};
+}
+
+// hatch one facet: parallel broken strokes along its fall line, spacing and
+// weight from tone; the darkest planes get cross-hatch until they read black.
+function hatchFacet(g, M, f, o){
+  const {ax, ay} = M;
+  let dx = f.mbx - ax, dy = f.mby - ay;
+  const L = Math.hypot(dx, dy) || 1;
+  dx/=L; dy/=L;
+  const px = -dy, py = dx;
+  const t = f.tone;
+
+  // rendering recipe per tone band
+  let passes, gap, alpha, wgt, snow;
+  if(t < 0.24){       passes=1; gap=8.5; alpha=.30; wgt=.7;  snow=.66; }
+  else if(t < 0.45){  passes=1; gap=5.6; alpha=.42; wgt=.8;  snow=.40; }
+  else if(t < 0.66){  passes=1; gap=3.6; alpha=.60; wgt=.9;  snow=.14; }
+  else if(t < 0.85){  passes=2; gap=2.9; alpha=.72; wgt=1.0; snow=0;   }
+  else {              passes=3; gap=2.0; alpha=.95; wgt=1.15; snow=0;  }
+  gap *= o.k; wgt *= o.k;
 
   g.save();
-  g.clip(sil);
-
-  // Facets. The range is cut into bands; each band gets its own tone and its
-  // own drift, so faces alternate light/dark and the boundaries read as arêtes.
-  const bandAt = x => {
-    const v = vnoise1(x/(78*kx), sd+7)*0.62 + vnoise1(x/(26*kx), sd+19)*0.38;
-    return Math.floor(v*8);
-  };
-  const bandTone  = i => 0.60 + 0.40*hash1(i*3.7, sd+31);
-  const bandDrift = i => (hash1(i*5.1, sd+43) - 0.5)*0.22;
-
-  // 1. faces — short parallel strokes along the fall line. Independent marks,
-  //    never a connected walk, so tone comes from packing rather than streaks.
-  const hx = o.hatchX, hy = o.hatchY;
-  let prevBand = bandAt(r.x0);
-  const aretes = [];
-  for(let x = r.x0; x < r.x1; x += hx){
-    const top = ridgeY(r, x);
-    if(top > bottom) continue;
-    const band = bandAt(x);
-    if(band !== prevBand){ aretes.push(x); prevBand = band; }
-    const tone  = bandTone(band);
-    const slope = ridgeSlopeWide(r, x);
-    const shade = clamp(0.5 + slope*1.30, 0, 1);
-    const dirx  = clamp(slope, -1.7, 1.7)*0.50 + bandDrift(band);
-    // scalloped snowline: strokes stop hard, leaving crisp white fields
-    const snow = (42 + 82*vnoise1(x/(52*kx), sd+23))*kv;
-    const faceH = bottom - top;
-    for(let d = rr(0, hy); d < faceH; d += hy){
-      const y = top + d;
-      const depth = clamp(d/(560*kv), 0, 1);
-      // smooth 2-D mottling keeps the tone from reading as vertical stripes
-      const mottle = 0.70 + 0.62*vnoise2(x/(78*kx), y/(88*kv), sd+3);
-      let dens = (0.12 + shade*1.10) * (0.52 + 0.62*tone) * mottle * (0.86 + 0.58*depth) * o.dens;
-      if(shade < 0.44 && d < snow) dens *= 0.12;
-      if(d < 14*kv) dens *= 0.35;                    // keep the crest edge clean
-      if(rnd() > dens) continue;
-      const len = rr(1.1, 2.6)*hy;
-      const jx = x + rr(-hx*0.55, hx*0.55);
-      const jy = y + rr(-hy*0.45, hy*0.45);
-      const ex = jx + dirx*len + (vnoise1((jy)/(15*kx), sd+13)-.5)*2.2*kx;
-      const ey = jy + len;
-      if(ey < ridgeY(r, ex) || jy < ridgeY(r, jx)) continue;
-      pen.line(jx, jy, ex, ey, o.hatch*rr(0.62, 1.15), o.hatchW);
-      // cross-hatch only in the deepest shadow, to push it darker still
-      if(dens > 0.80 && rnd() < 0.30){
-        const cl = rr(0.7, 1.6)*hy;
-        pen.line(jx, jy, jx + cl*0.9, jy + cl*0.25, o.hatch*rr(0.5,0.9), o.hatchW*0.9);
+  g.clip(f.poly);
+  const reach = L*1.25;
+  const halfW = M.w*1.1;
+  for(let pass=0; pass<passes; pass++){
+    // each extra pass rotates a touch — classic cross-hatch
+    const rot = pass*0.30;
+    const c = Math.cos(rot), sn = Math.sin(rot);
+    const ddx = dx*c - dy*sn, ddy = dx*sn + dy*c;
+    const ppx = -ddy, ppy = ddx;
+    const spacing = gap*(1 + pass*0.35);
+    for(let off = -halfW; off <= halfW; off += spacing){
+      const jo = off + rr(-spacing*0.3, spacing*0.3);
+      let sx = ax + ppx*jo - ddx*L*0.08;
+      let sy = ay + ppy*jo - ddy*L*0.08;
+      // broken into dashes with hand jitter
+      let dpos = rr(0, 10*o.k);
+      while(dpos < reach){
+        const dl = rr(12, 30)*o.k;
+        const gpost = rr(1.5, 4.5)*o.k;
+        const x1 = sx + ddx*dpos, y1 = sy + ddy*dpos;
+        const frac = dpos/reach;
+        if(snow > 0 && frac < snow*(0.8 + 0.45*vnoise1(jo/(26*o.k), M.cfg.seed+3))){
+          dpos += dl + gpost; continue;      // bare snow near the summit
+        }
+        const x2 = sx + ddx*(dpos+dl) + rr(-1,1)*o.k;
+        const y2 = sy + ddy*(dpos+dl) + rr(-1,1)*o.k;
+        const breathe = 0.72 + 0.55*vnoise1((jo*0.7 + dpos*0.9)/(34*o.k), M.cfg.seed+7);
+        o.pen.line(x1, y1, x2, y2, alpha*o.a*breathe, wgt);
+        dpos += dl + gpost;
       }
     }
   }
-
-  // 2. arêtes — the hard creases where two faces meet
-  for(const ax of aretes){
-    const top = ridgeY(r, ax);
-    if(top > bottom - 40*kv) continue;
-    const slope = ridgeSlopeWide(r, ax);
-    let px = ax, py = top + rr(0, 5)*kv;
-    let dx = clamp(slope, -1.7, 1.7)*0.42 + (hash1(ax, sd+51)-0.5)*0.14;
-    const steps = Math.round(rr(0.25, 0.62)*(bottom - top)/(6*kv));
-    const a0 = o.crease*rr(0.75, 1.0);
-    for(let k=0;k<steps;k++){
-      const nx = px + dx*6*kv + (vnoise1((px + k*9)/(13*kx), sd+9)-.5)*1.8*kx;
-      const ny = py + 6*kv;
-      if(ny > bottom || ny < ridgeY(r, nx)) break;
-      pen.line(px, py, nx, ny, a0*(1 - 0.5*k/steps), o.creaseW);
-      px = nx; py = ny; dx *= 0.99;
-    }
-  }
-
-  // 3. rock ledges — short horizontal ticks that break the fall lines up
-  for(let x = r.x0; x < r.x1; x += 7*kx){
-    const top = ridgeY(r, x);
-    const slope = ridgeSlopeWide(r, x);
-    const shade = clamp(0.5 + slope*1.30, 0, 1);
-    if(shade < 0.48) continue;
-    const n = Math.round(rr(0, 4));
-    for(let k=0;k<n;k++){
-      const d = rr(20, 320)*kv;
-      const y = top + d;
-      if(y > bottom) continue;
-      const l = rr(2.5, 9)*kx;
-      pen.line(x, y, x + l, y + rr(-1.2, 1.2)*kv, o.hatch*rr(0.6, 1.15), o.hatchW);
-    }
-  }
-
-  // 4. crest last, so the outline always stays crisp on top of the shading
-  g.beginPath();
-  for(let x = r.x0; x <= r.x1; x += 1.6*kx){
-    const y = ridgeY(r,x) + (vnoise1(x/(5*kx), sd+3)-.5)*o.wob;
-    if(x === r.x0) g.moveTo(x,y); else g.lineTo(x,y);
-  }
-  g.strokeStyle = 'rgba(26,26,24,'+o.crest+')';
-  g.lineWidth = o.crestW;
-  g.lineJoin = 'round';
-  g.lineCap = 'round';
-  g.stroke();
-
-  pen.flush();
+  o.pen.flushInto(g);
   g.restore();
+}
+
+function drawMountain(g, M, o){
+  // paper knock-out so this mass occludes what is behind it
+  g.fillStyle = PAPER;
+  g.fill(M.out);
+
+  for(const f of M.facets) hatchFacet(g, M, f, o);
+
+  // aretes — the internal ridges, drawn as crisp creases
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  for(let i=1;i<M.ridges.length-1;i++){
+    const rl = M.ridges[i];
+    // heavier where the facets it separates contrast strongly
+    const c = Math.abs(M.facets[i].tone - M.facets[i-1].tone);
+    g.strokeStyle = 'rgba(26,26,24,'+(o.a*(0.30 + 0.55*c)).toFixed(3)+')';
+    g.lineWidth = o.k*(0.8 + 0.7*c);
+    g.beginPath();
+    g.moveTo(rl[0][0], rl[0][1]);
+    for(let j=1;j<rl.length;j++){
+      if(vnoise1(j*1.7 + i*3.1, M.cfg.seed+29) < 0.80) g.lineTo(rl[j][0], rl[j][1]);
+      else g.moveTo(rl[j][0], rl[j][1]);
+    }
+    g.stroke();
+  }
+
+  // skyline — always the strongest line in the drawing
+  g.strokeStyle = 'rgba(26,26,24,'+(o.a*0.95).toFixed(3)+')';
+  g.lineWidth = o.k*1.5;
+  g.stroke(M.out);
 }
 
 function drawConifer(g, x, y, h, alpha){
@@ -384,68 +396,52 @@ function drawTreeband(g, cfg){
 /* ------------------------------------------------------------------ *
  *  Static scene: dashed grid, ranges, logo
  * ------------------------------------------------------------------ */
-// ranges are stored normalised (fractions of the design box) so the same
-// art re-fits itself to the wide and narrow layouts
-const RANGE_SPECS = [
-  {baseOff:0.1244, seed:11, detail:0.1200, jag:0.0560,
-   peaks:[{px:-0.0223,pw:0.3454,ph:0.5022,s:0.95},
-          {px:0.2228,pw:0.2897,ph:0.4711,s:0.9},
-          {px:0.4568,pw:0.3565,ph:0.5271,s:0.85},
-          {px:0.6964,pw:0.3343,ph:0.5556,s:0.85},
-          {px:0.9025,pw:0.3565,ph:0.5804,s:0.9},
-          {px:1.1031,pw:0.3120,ph:0.5111,s:0.95}],
-   o:{crest:.50, crestW:1.05, wob:2.2, crease:.26, creaseW:.85, hatchX:3.0, hatchY:6.0, hatch:.24, hatchW:.75, dens:.54}},
-  {baseOff:0.1244, seed:29, detail:0.1422, jag:0.0640,
-   peaks:[{px:0.0334,pw:0.2897,ph:0.5502,s:0.9},
-          {px:0.1961,pw:0.2618,ph:0.6089,s:0.82},
-          {px:0.3120,pw:0.2396,ph:0.5467,s:0.9},
-          {px:0.4457,pw:0.2618,ph:0.5111,s:0.95},
-          {px:0.5627,pw:0.2507,ph:0.5911,s:0.85},
-          {px:0.6407,pw:0.2340,ph:0.6284,s:0.8},
-          {px:0.7532,pw:0.2897,ph:0.6996,s:0.78},
-          {px:0.8802,pw:0.2618,ph:0.5947,s:0.88},
-          {px:1.0362,pw:0.2897,ph:0.5449,s:0.95}],
-   o:{crest:.86, crestW:1.30, wob:2.6, crease:.46, creaseW:1.0, hatchX:2.6, hatchY:5.4, hatch:.36, hatchW:.8, dens:.88}},
-  {baseOff:0.1244, seed:53, detail:0.1244, jag:0.0640,
-   peaks:[{px:0.1003,pw:0.2897,ph:0.4596,s:0.88},
-          {px:0.3148,pw:0.2786,ph:0.5004,s:0.85},
-          {px:0.5014,pw:0.2897,ph:0.4258,s:0.95},
-          {px:0.6574,pw:0.2674,ph:0.4827,s:0.86},
-          {px:0.8022,pw:0.3120,ph:0.5129,s:0.84},
-          {px:1.0028,pw:0.2897,ph:0.4542,s:0.92}],
-   o:{crest:.94, crestW:1.45, wob:2.8, crease:.54, creaseW:1.1, hatchX:2.4, hatchY:5.2, hatch:.44, hatchW:.85, dens:.98}},
-  {baseOff:0.1422, seed:71, detail:0.1067, jag:0.0500,
-   peaks:[{px:0.0223,pw:0.3120,ph:0.3493,s:0.92},
-          {px:0.2396,pw:0.3008,ph:0.4062,s:0.86},
-          {px:0.4401,pw:0.3120,ph:0.3369,s:0.95},
-          {px:0.6184,pw:0.2897,ph:0.3849,s:0.88},
-          {px:0.7911,pw:0.3343,ph:0.4151,s:0.86},
-          {px:1.0139,pw:0.3120,ph:0.3600,s:0.94}],
-   o:{crest:1.0, crestW:1.60, wob:3.0, crease:.60, creaseW:1.2, hatchX:2.3, hatchY:5.0, hatch:.50, hatchW:.9, dens:1.06}},
+// composition, normalised to the design box; mSpan slices it for narrow layouts
+const PEAK_LAYERS = [
+  { a:.34, k:.80, peaks:[   // far haze
+    {px:.05,ph:.30,pw:.145,spurs:3,dip:16,jag:26,by:1.00},
+    {px:.24,ph:.36,pw:.16, spurs:3,dip:16,jag:30,by:1.00},
+    {px:.44,ph:.32,pw:.15, spurs:3,dip:16,jag:26,by:1.00},
+    {px:.62,ph:.40,pw:.17, spurs:3,dip:16,jag:32,by:1.00},
+    {px:.82,ph:.34,pw:.15, spurs:3,dip:16,jag:28,by:1.00},
+    {px:.98,ph:.30,pw:.14, spurs:3,dip:16,jag:26,by:1.00}]},
+  { a:.72, k:.92, peaks:[   // main skyline
+    {px:.13,ph:.44,pw:.20, spurs:4,dip:26,jag:44,by:1.02},
+    {px:.33,ph:.38,pw:.18, spurs:4,dip:24,jag:40,by:1.02},
+    {px:.52,ph:.47,pw:.21, spurs:5,dip:26,jag:46,by:1.02},
+    {px:.70,ph:.58,pw:.24, spurs:5,dip:30,jag:54,by:1.02},   // the tall one
+    {px:.90,ph:.42,pw:.19, spurs:4,dip:24,jag:42,by:1.02}]},
+  { a:.90, k:1.0, peaks:[   // mid
+    {px:.02,ph:.36,pw:.21, spurs:4,dip:30,jag:44,by:1.06},
+    {px:.22,ph:.42,pw:.23, spurs:5,dip:34,jag:50,by:1.06},
+    {px:.45,ph:.33,pw:.20, spurs:4,dip:30,jag:42,by:1.06},
+    {px:.67,ph:.38,pw:.22, spurs:5,dip:34,jag:48,by:1.06},
+    {px:.88,ph:.44,pw:.23, spurs:5,dip:34,jag:50,by:1.06}]},
+  { a:1.0, k:1.12, peaks:[  // foreground shoulders
+    {px:-.02,ph:.34,pw:.26, spurs:5,dip:40,jag:52,by:1.12},
+    {px:.20,ph:.27,pw:.22, spurs:4,dip:36,jag:44,by:1.12},
+    {px:.55,ph:.22,pw:.24, spurs:4,dip:36,jag:40,by:1.14},
+    {px:.83,ph:.30,pw:.26, spurs:5,dip:40,jag:48,by:1.12},
+    {px:1.03,ph:.36,pw:.24,spurs:5,dip:40,jag:50,by:1.12}]},
 ];
 
-// mSpan is how much of the range the layout shows: 1 = the whole thing, 0.5 =
-// the middle half at twice the scale. Vertical scale follows the horizontal one,
-// so the drawing keeps its proportions in every layout.
-function rangesFor(){
-  const kx = DW/(1795*(L.mSpan||1));
-  const kv = kx;
-  return RANGE_SPECS.map(R => {
-    const base = DH + R.baseOff*DH;
-    const o = Object.assign({}, R.o, {kx, kv,
-      crestW:R.o.crestW*kx, wob:R.o.wob*kv, creaseW:R.o.creaseW*kx,
-      hatchX:R.o.hatchX*kx, hatchY:R.o.hatchY*kv,
-      hatchW:R.o.hatchW*kx, cliffGap:R.o.cliffGap*kx});
-    const cfg = {
-      base, seed:R.seed, kx, kv,
-      detail:R.detail*1125*kv, jag:R.jag*1125*kv,
-      peaks:R.peaks.map(q => ({
-        x:(q.px - 0.5)*1795*kx + DW/2,
-        w:q.pw*1795*kx,
-        y:base - q.ph*1125*kv, s:q.s}))
-    };
-    return {cfg, o};
-  });
+function drawPeaks(g){
+  const kx = DW/(1795*(L.mSpan||1));    // world scale for this layout
+  let seed = 101;
+  for(const layer of PEAK_LAYERS){
+    const o = { a:layer.a, k:layer.k*kx, pen:new Pen(g) };
+    for(const P of layer.peaks){
+      const M = buildMountain({
+        ax:(P.px - 0.5)*1795*kx + DW/2,
+        ay:DH*P.by - P.ph*1125*kx,
+        w: P.pw*1795*kx,
+        by:DH*P.by,
+        dip:P.dip*kx, jag:P.jag*kx,
+        spurs:P.spurs, seed:(seed += 13)
+      });
+      drawMountain(g, M, o);
+    }
+  }
 }
 
 function drawGrid(g){
@@ -500,7 +496,7 @@ function buildScene(){
   g.setTransform(S*DPR,0,0,S*DPR, offX*DPR, offY*DPR);
   rnd = mulberry32(20260828);
   drawGrid(g);
-  for(const R of rangesFor()) drawRidge(g, makeRidge(R.cfg), R.o);
+  drawPeaks(g);
   // foreground treeline hugging the bottom edge, dense at the outer corners
   const tk = DW/(1795*(L.mSpan||1));
   for(const b of [

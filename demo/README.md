@@ -13,15 +13,13 @@ breaks into small ink flecks that drift off and fade.
 Everything is drawn to a single `<canvas>` in a fixed "design space", so the whole
 composition scales as one graphic:
 
-- **Art** — four ridge layers. Silhouettes come from peak humps plus *ridged*
-  multifractal noise, which creases rather than blobs, so crests serrate into
-  spires and notches. Shading reads a **wide-baseline slope**, not the jagged
-  crest itself, so faces resolve into broad lit and shadowed planes instead of
-  vertical stripes; on top of that sit a facet field (banded tone + arêtes at the
-  boundaries), a scalloped snowline that cuts hatching off hard, rock ledges, and
-  a conifer treeline. Faces are filled with short independent parallel strokes —
-  never a connected walk — so tone comes from packing and never streaks. Drawn
-  once into an offscreen canvas.
+- **Art** — four layers of **faceted peaks**. A mountain is an apex with a fan
+  of jagged ridge lines falling to its base; adjacent ridges bound a facet — one
+  plane of rock hatched as a unit (bright snow, grey rock, or cross-hatched
+  near-black shadow, lit from the upper-left, with adjacent planes pushed apart
+  in tone so every arête is a visible break). Internal ridges are drawn as
+  crisp creases, the skyline as the strongest line in the drawing. Plus a
+  conifer treeline. Drawn once into an offscreen canvas.
 - **Dissolve** — a low-resolution threshold field `thr = x·(1-EDGE) + noise·EDGE`,
   where the noise mixes three scales: coarse chunks that let go as whole pieces,
   mid grain, and per-cell grit. A cell is visible when `progress > thr`, so a
