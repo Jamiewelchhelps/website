@@ -208,61 +208,6 @@ function ridgeline(ax, ay, bx, by, seed, jag){
   return pts;
 }
 
-function buildMountain(cfg){
-  const {ax, ay, w, by, seed} = cfg;
-  const rng = mulberry32(seed*7919 + 11);
-  const R = (lo,hi)=>lo+(hi-lo)*rng();
-  const k = cfg.spurs;
-  const ridges = [];
-  for(let i=0;i<=k;i++){
-    const t = i/k;
-    const bx = ax - w + 2*w*t + R(-w*0.05, w*0.05);
-    // spurs near the centre run toward the viewer, so their feet sit lower
-    const bY = by + Math.sin(t*Math.PI)*cfg.dip + R(-10, 10);
-    const jag = cfg.jag * (0.75 + 0.7*Math.abs(t-0.5)*2);
-    ridges.push(ridgeline(ax, ay + (i===0||i===k ? 0 : R(0, 14)), bx, bY, seed + i*17, jag));
-  }
-
-  // facets between neighbouring ridges
-  const facets = [];
-  for(let i=0;i<k;i++){
-    const A = ridges[i], B = ridges[i+1];
-    const poly = new Path2D();
-    poly.moveTo(A[0][0], A[0][1]);
-    for(const q of A) poly.lineTo(q[0], q[1]);
-    poly.lineTo(B[B.length-1][0], B[B.length-1][1]);
-    for(let j=B.length-1;j>=0;j--) poly.lineTo(B[j][0], B[j][1]);
-    poly.closePath();
-    const mbx = (A[A.length-1][0] + B[B.length-1][0])/2;
-    const mby = (A[A.length-1][1] + B[B.length-1][1])/2;
-    facets.push({poly, mbx, mby, i});
-  }
-
-  // tone: light from the upper-left, so right-facing planes fall into shadow.
-  // Adjacent facets are pushed apart so every arete is a visible tone break.
-  for(const f of facets){
-    const dirx = clamp((f.mbx - ax)/w, -1, 1);
-    f.tone = clamp(0.60 + dirx*0.55 + R(-0.13, 0.13), 0.06, 1);
-  }
-  for(let i=1;i<facets.length;i++){
-    const d = facets[i].tone - facets[i-1].tone;
-    if(Math.abs(d) < 0.30){
-      const push = (0.30 - Math.abs(d)) * (d >= 0 ? 1 : -1);
-      facets[i].tone = clamp(facets[i].tone + push*0.8, 0.02, 1);
-      facets[i-1].tone = clamp(facets[i-1].tone - push*0.35, 0.02, 1);
-    }
-  }
-
-  // outline of the whole mass, for occlusion + the crisp skyline
-  const out = new Path2D();
-  const Lr = ridges[0], Rr = ridges[k];
-  out.moveTo(Lr[Lr.length-1][0], Lr[Lr.length-1][1]);
-  for(let j=Lr.length-1;j>=0;j--) out.lineTo(Lr[j][0], Lr[j][1]);
-  for(const q of Rr) out.lineTo(q[0], q[1]);
-  out.closePath();
-  return {cfg, ridges, facets, out, ax, ay, w};
-}
-
 // hatch one facet: parallel broken strokes along its fall line, spacing and
 // weight from tone; the darkest planes get cross-hatch until they read black.
 function hatchFacet(g, M, f, o){
@@ -275,8 +220,8 @@ function hatchFacet(g, M, f, o){
 
   // rendering recipe per tone band
   let passes, gap, alpha, wgt, snow;
-  if(t < 0.24){       passes=1; gap=6.6; alpha=.34; wgt=.75; snow=.52; }
-  else if(t < 0.45){  passes=1; gap=4.4; alpha=.48; wgt=.85; snow=.26; }
+  if(t < 0.24){       passes=1; gap=7.5; alpha=.32; wgt=.75; snow=.68; }
+  else if(t < 0.45){  passes=1; gap=4.6; alpha=.46; wgt=.85; snow=.42; }
   else if(t < 0.66){  passes=2; gap=3.1; alpha=.62; wgt=.9;  snow=.07; }
   else if(t < 0.85){  passes=2; gap=2.4; alpha=.78; wgt=1.0; snow=0;   }
   else {              passes=3; gap=1.8; alpha=.96; wgt=1.15; snow=0;  }
@@ -295,6 +240,10 @@ function hatchFacet(g, M, f, o){
     const spacing = gap*(1 + pass*0.35);
     for(let off = -halfW; off <= halfW; off += spacing){
       const jo = off + rr(-spacing*0.3, spacing*0.3);
+      // couloir channels: some fall lines drop out entirely, some run heavy
+      const band = vnoise1(jo/(15*o.k), M.cfg.seed+17);
+      if(band < 0.22 && t < 0.85){ continue; }
+      const bandMul = 0.55 + 0.85*band;
       let sx = ax + ppx*jo - ddx*L*0.08;
       let sy = ay + ppy*jo - ddy*L*0.08;
       // broken into dashes with hand jitter
@@ -311,7 +260,7 @@ function hatchFacet(g, M, f, o){
         const y2 = sy + ddy*(dpos+dl) + rr(-1,1)*o.k;
         const breathe = (0.72 + 0.55*vnoise1((jo*0.7 + dpos*0.9)/(34*o.k), M.cfg.seed+7))
                       * (0.80 + 0.55*frac);
-        o.pen.line(x1, y1, x2, y2, alpha*o.a*breathe, wgt);
+        o.pen.line(x1, y1, x2, y2, alpha*o.a*breathe*bandMul, wgt);
         dpos += dl + gpost;
       }
     }
@@ -320,43 +269,189 @@ function hatchFacet(g, M, f, o){
   g.restore();
 }
 
-function drawMountain(g, M, o){
-  // paper knock-out so this mass occludes what is behind it
+/* ------------------------------------------------------------------ *
+ *  Massifs traced from the reference
+ *
+ *  Each layer's skyline is an explicit polyline digitised from the source
+ *  frames (x, y as fractions of the reference frame), so the composition —
+ *  the dominant summit right of centre, the tall left peak, the mid saddle —
+ *  is the reference's, not invented. The polyline is serrated with fine
+ *  ridged noise, then aretes drop from every summit and the panels between
+ *  them are hatched as planes.
+ * ------------------------------------------------------------------ */
+const SIL = {
+  back: [[-.06,.76],[.06,.665],[.13,.695],[.21,.645],[.28,.685],[.37,.625],
+         [.45,.665],[.53,.635],[.62,.60],[.70,.655],[.78,.615],[.88,.665],
+         [.97,.635],[1.06,.70]],
+  main: [[-.06,.88],[.01,.775],[.035,.735],[.06,.77],[.095,.66],[.12,.70],
+         [.155,.545],[.19,.63],[.225,.575],[.26,.685],[.30,.635],[.335,.71],
+         [.375,.60],[.41,.67],[.445,.585],[.475,.655],[.505,.60],[.53,.655],
+         [.55,.525],[.575,.585],[.61,.655],[.645,.585],[.67,.635],
+         [.717,.425],[.752,.545],[.78,.60],[.805,.575],[.835,.645],
+         [.872,.50],[.91,.615],[.94,.585],[.98,.65],[1.06,.72]],
+  fore: [[-.06,.92],[.04,.845],[.12,.885],[.22,.825],[.32,.885],[.40,.845],
+         [.50,.895],[.60,.845],[.70,.885],[.78,.835],[.88,.885],[.97,.845],
+         [1.06,.90]],
+};
+const MASSIFS = [
+  {sil:'back', a:.40, k:.78, amp:6,  toneBias:-.06, toneMax:.60, valley:.80, seed:41},
+  {sil:'main', a:.96, k:1.00, amp:12, toneBias:0,   toneMax:1.0, valley:.905, seed:71},
+  {sil:'fore', a:1.0, k:1.08, amp:7, toneBias:0,   toneMax:.85, valley:1.06, seed:97},
+];
+
+function silWorld(pts, kx){
+  return pts.map(q => [ (q[0]-0.5)*1795*kx + DW/2, DH - (1 - q[1])*1125*kx ]);
+}
+
+// subdivide the traced skyline and cut fine notches into it
+function serrate(pts, seed, amp, kx){
+  const out = [];
+  for(let i=0;i<pts.length-1;i++){
+    const x1=pts[i][0], y1=pts[i][1], x2=pts[i+1][0], y2=pts[i+1][1];
+    const seg = Math.hypot(x2-x1, y2-y1);
+    const n = Math.max(2, Math.round(seg/(15*kx)));
+    for(let j=0;j<n;j++){
+      const t = j/n;
+      let x = x1 + (x2-x1)*t, y = y1 + (y2-y1)*t;
+      if(i>0 || j>0){
+        y += (ridged1(x/(30*kx) + seed*7.7, seed) - .45) * amp;
+        y += (ridged1(x/(9*kx) + seed*3.1, seed+13) - .45) * amp * .45;
+        x += (vnoise1(y/(24*kx), seed+3) - .5) * amp * .5;
+      }
+      out.push([x, y]);
+    }
+  }
+  out.push(pts[pts.length-1].slice());
+  return out;
+}
+
+function drawMassif(g, cfgM){
+  const kx = DW/(1795*(L.mSpan||1));
+  const o = { a:cfgM.a, k:cfgM.k*kx, kx, seed:cfgM.seed, pen:new Pen(g) };
+  const ctrl = silWorld(SIL[cfgM.sil], kx);
+  const pts = serrate(ctrl, cfgM.seed, cfgM.amp*kx, kx);
+  const bottom = DH*1.18;
+
+  const mass = new Path2D();
+  mass.moveTo(pts[0][0], bottom);
+  for(const q of pts) mass.lineTo(q[0], q[1]);
+  mass.lineTo(pts[pts.length-1][0], bottom);
+  mass.closePath();
   g.fillStyle = PAPER;
-  g.fill(M.out);
+  g.fill(mass);
 
-  for(const f of M.facets) hatchFacet(g, M, f, o);
+  g.save();
+  g.clip(mass);
 
-  // aretes — the internal ridges, drawn as crisp creases
+  // summits = prominent local maxima of the traced control points
+  const summits = [];
+  for(let i=1;i<ctrl.length-1;i++){
+    if(ctrl[i][1] < ctrl[i-1][1] && ctrl[i][1] < ctrl[i+1][1]){
+      const drop = Math.min(ctrl[i-1][1], ctrl[i+1][1]) - ctrl[i][1];
+      if(drop > 22*kx) summits.push({x:ctrl[i][0], y:ctrl[i][1], drop});
+    }
+  }
+
+  // aretes fan out from every summit and die at the valley floor — faces are
+  // mountain-shaped panels, not full-height stripes
+  const valleyY = DH - (1 - cfgM.valley)*1125*kx;
+  const aretes = [];
+  let sd = cfgM.seed;
+  for(const S of summits){
+    const h = valleyY - S.y;
+    const n = S.drop > 100*kx ? 4 : 3;
+    for(let k2=0;k2<n;k2++){
+      const t = (k2+1)/(n+1);
+      const bx = S.x + (t-0.5)*2*h*rr(0.42, 0.75) + rr(-24, 24)*kx;
+      const by = valleyY + (vnoise1(bx/(160*kx), cfgM.seed+51) - .3)*70*kx + rr(-14, 20)*kx;
+      aretes.push({apex:S, pts:ridgeline(S.x, S.y, bx, by, sd += 7, 22*kx)});
+    }
+  }
+  aretes.sort((p,q) => p.pts[p.pts.length-1][0] - q.pts[q.pts.length-1][0]);
+
+  // panels between neighbouring aretes; the mass clip trims them to the skyline
+  const facets = [];
+  for(let i=0;i<aretes.length-1;i++){
+    const A = aretes[i], B = aretes[i+1];
+    const poly = new Path2D();
+    poly.moveTo(A.apex.x, A.apex.y - 60*kx);
+    for(const q of A.pts) poly.lineTo(q[0], q[1]);
+    for(let j=B.pts.length-1;j>=0;j--) poly.lineTo(B.pts[j][0], B.pts[j][1]);
+    poly.lineTo(B.apex.x, B.apex.y - 60*kx);
+    poly.closePath();
+    const ax = (A.apex.x + B.apex.x)/2, ay = Math.min(A.apex.y, B.apex.y);
+    const la = A.pts[A.pts.length-1], lb = B.pts[B.pts.length-1];
+    const mbx = (la[0] + lb[0])/2, mby = (la[1] + lb[1])/2;
+    const w = Math.max(70*kx, Math.abs(lb[0] - la[0]));
+    // the reference's lighting rule, applied literally: every peak carries a
+    // bright lit face on its left and a hard shadow face on its right
+    let tone;
+    if(A.apex === B.apex){
+      const rel = (mbx - A.apex.x)/Math.max(w, 1);
+      if(rel < -0.10)     tone = 0.10 + rr(0, 0.15);
+      else if(rel > 0.10) tone = 0.76 + rr(0, 0.20);
+      else                tone = 0.44 + rr(-0.10, 0.10);
+    } else {
+      // a col panel belongs to the nearer summit: the left peak's right flank
+      // falls into shadow, the right peak's face catches the light
+      const da = Math.abs(mbx - A.apex.x), db = Math.abs(B.apex.x - mbx);
+      tone = da < db ? 0.66 + rr(0, 0.26) : 0.10 + rr(0, 0.16);
+    }
+    tone = clamp(tone + cfgM.toneBias, 0.03, cfgM.toneMax);
+    facets.push({poly, mbx, mby, tone, ax, ay, w});
+  }
+  // neighbouring panels forced apart in tone so every arete is a visible break
+  for(let i=1;i<facets.length;i++){
+    const d = facets[i].tone - facets[i-1].tone;
+    if(Math.abs(d) < 0.26){
+      const push = (0.26 - Math.abs(d)) * (d >= 0 ? 1 : -1);
+      facets[i].tone = clamp(facets[i].tone + push*0.8, 0.04, cfgM.toneMax);
+    }
+  }
+  for(const f of facets)
+    hatchFacet(g, {ax:f.ax, ay:f.ay, w:f.w, cfg:{seed:o.seed + Math.round(f.ax)}}, f, o);
+
+  // scree wash below the valley floor — quiet, sparse, mostly paper
+  for(let x = pts[0][0]; x < pts[pts.length-1][0]; x += 5*kx){
+    const top = valleyY + (vnoise1(x/(160*kx), cfgM.seed+51) - .3)*70*kx;
+    for(let y = top + rr(0, 9*kx); y < bottom; y += rr(7, 13)*kx){
+      if(rnd() > 0.34) continue;
+      const l = rr(3, 8)*kx;
+      o.pen.line(x, y, x + rr(-1.5,1.5)*kx, y + l, o.a*rr(0.10, 0.26), o.k*0.8);
+    }
+  }
+  o.pen.flushInto(g);
+
+  // arete creases
   g.lineJoin = 'round'; g.lineCap = 'round';
-  for(let i=1;i<M.ridges.length-1;i++){
-    const rl = M.ridges[i];
-    // heavier where the facets it separates contrast strongly
-    const c = Math.abs(M.facets[i].tone - M.facets[i-1].tone);
-    g.strokeStyle = 'rgba(26,26,24,'+(o.a*(0.30 + 0.55*c)).toFixed(3)+')';
-    g.lineWidth = o.k*(0.8 + 0.7*c);
+  for(const A of aretes){
+    g.strokeStyle = 'rgba(26,26,24,'+(o.a*0.34).toFixed(3)+')';
+    g.lineWidth = o.k*0.9;
     g.beginPath();
-    g.moveTo(rl[0][0], rl[0][1]);
-    for(let j=1;j<rl.length;j++){
-      if(vnoise1(j*1.7 + i*3.1, M.cfg.seed+29) < 0.80) g.lineTo(rl[j][0], rl[j][1]);
-      else g.moveTo(rl[j][0], rl[j][1]);
+    g.moveTo(A.pts[0][0], A.pts[0][1]);
+    for(let j=1;j<A.pts.length;j++){
+      if(vnoise1(j*1.9 + A.pts[0][0], cfgM.seed+29) < 0.78) g.lineTo(A.pts[j][0], A.pts[j][1]);
+      else g.moveTo(A.pts[j][0], A.pts[j][1]);
     }
     g.stroke();
   }
+  g.restore();
 
-  // skyline — always the strongest line in the drawing
-  g.strokeStyle = 'rgba(26,26,24,'+(o.a*0.95).toFixed(3)+')';
-  g.lineWidth = o.k*1.5;
-  g.stroke(M.out);
+  // the skyline itself — crisp, the strongest line in the drawing
+  g.strokeStyle = 'rgba(26,26,24,'+(o.a*0.92).toFixed(3)+')';
+  g.lineWidth = o.k*1.45;
+  g.lineJoin = 'round';
+  g.beginPath();
+  g.moveTo(pts[0][0], pts[0][1]);
+  for(let j=1;j<pts.length;j++) g.lineTo(pts[j][0], pts[j][1]);
+  g.stroke();
 }
 
 function drawConifer(g, x, y, h, alpha){
   const w = h*0.34;
   g.beginPath();
   g.moveTo(x, y - h);
-  let side = 1, py = y - h, pw = 0;
   const tiers = Math.max(4, Math.round(h/9));
-  // right edge down
   for(let i=1;i<=tiers;i++){
     const t = i/tiers;
     const cw = w*Math.pow(t,0.85);
@@ -366,7 +461,6 @@ function drawConifer(g, x, y, h, alpha){
   }
   g.lineTo(x + w*0.10, y);
   g.lineTo(x - w*0.10, y);
-  // left edge up
   for(let i=tiers;i>=1;i--){
     const t = i/tiers;
     const cw = w*Math.pow(t,0.85);
@@ -384,7 +478,6 @@ function drawTreeband(g, cfg){
   for(let i=0;i<cfg.count;i++){
     const t = Math.pow(rnd(), cfg.bias||1);
     const x = cfg.x0 + (cfg.x1-cfg.x0)*t;
-    // density decays away from the anchored corner
     const edge = cfg.bias > 1 ? 1 - t : t;
     const y = rr(cfg.y0, cfg.y1) - edge*edge*(cfg.fade||70);
     const depth = clamp((y - cfg.y0)/(cfg.y1 - cfg.y0), 0, 1);
@@ -395,49 +488,8 @@ function drawTreeband(g, cfg){
   for(const t of trees) drawConifer(g, t.x, t.y, t.h, clamp(t.a, 0.22, 0.95));
 }
 
-/* ------------------------------------------------------------------ *
- *  Static scene: dashed grid, ranges, logo
- * ------------------------------------------------------------------ */
-// composition, normalised to the design box; mSpan slices it for narrow layouts.
-// Each layer is a dense generated row of narrow, sharp peaks; the skyline row
-// carries one dominant summit right of centre.
-const PEAK_LAYERS = [
-  {a:.42, k:.70, by:1.00, n:12, ph:[.22,.36], pw:[.050,.085], spurs:3, dip:14, jag:34, seed:900},
-  {a:.78, k:.84, by:1.03, n:11, ph:[.30,.52], pw:[.058,.098], spurs:4, dip:22, jag:48, seed:910,
-   hero:{px:.68, ph:.64, pw:.115}},
-  {a:.94, k:.94, by:1.07, n:11, ph:[.26,.46], pw:[.058,.098], spurs:4, dip:28, jag:50, seed:920},
-  {a:1.0, k:1.05, by:1.125, n:10, ph:[.20,.38], pw:[.066,.110], spurs:5, dip:34, jag:52, seed:930},
-];
-
 function drawPeaks(g){
-  const kx = DW/(1795*(L.mSpan||1));    // world scale for this layout
-  for(const layer of PEAK_LAYERS){
-    const o = { a:layer.a, k:layer.k*kx, pen:new Pen(g) };
-    const rngL = mulberry32(layer.seed);
-    const RL = (lo,hi)=>lo+(hi-lo)*rngL();
-    const peaks = [];
-    for(let i=0;i<layer.n;i++){
-      const px = -0.06 + 1.12*(i + 0.5)/layer.n + RL(-0.35,0.35)/layer.n;
-      peaks.push({px,
-        ph:RL(layer.ph[0], layer.ph[1]),
-        pw:RL(layer.pw[0], layer.pw[1]),
-        seed:layer.seed + i*13});
-    }
-    if(layer.hero) peaks.push({...layer.hero, seed:layer.seed + 777});
-    // shorter peaks first, so the big ones read in front of their neighbours
-    peaks.sort((p,q) => p.ph - q.ph);
-    for(const P of peaks){
-      const M = buildMountain({
-        ax:(P.px - 0.5)*1795*kx + DW/2,
-        ay:DH*layer.by - P.ph*1125*kx,
-        w: P.pw*1795*kx,
-        by:DH*layer.by,
-        dip:layer.dip*kx, jag:layer.jag*kx,
-        spurs:layer.spurs, seed:P.seed
-      });
-      drawMountain(g, M, o);
-    }
-  }
+  for(const M of MASSIFS) drawMassif(g, M);
 }
 
 function drawGrid(g){

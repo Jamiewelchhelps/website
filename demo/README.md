@@ -13,14 +13,15 @@ breaks into small ink flecks that drift off and fade.
 Everything is drawn to a single `<canvas>` in a fixed "design space", so the whole
 composition scales as one graphic:
 
-- **Art** — four layers of densely packed, narrow **faceted spires**, generated
-  per layer (count, height/width ranges, one dominant summit right of centre).
-  A mountain is an apex with a fan of serrated ridge lines falling to its base;
-  adjacent ridges bound a facet hatched as one plane — small snow caps, grey
-  rock, or cross-hatched near-black shadow, lit from the upper-left, darkening
-  toward the foot so the masses connect. Adjacent planes are pushed apart in
-  tone so every arête is a hard break; the skyline is the strongest line. Plus
-  a conifer treeline. Drawn once into an offscreen canvas.
+- **Art** — three massifs whose skylines are **explicit polylines digitised from
+  the reference frames** (`SIL.back/main/fore`), so the composition — the
+  dominant summit right of centre, the tall left peak, the mid saddle — is the
+  reference's own. Each polyline is serrated with fine ridged noise; arêtes fan
+  from every prominent summit down to an undulating valley floor, and the panels
+  between them are hatched as planes under the reference's lighting rule: a
+  bright lit face left of every peak, a hard shadow flank falling right into the
+  col, couloir channels streaking the faces, and a quiet scree wash below the
+  valley line. Plus a conifer treeline. Drawn once into an offscreen canvas.
 - **Dissolve** — a low-resolution threshold field `thr = x·(1-EDGE) + noise·EDGE`,
   where the noise mixes three scales: coarse chunks that let go as whole pieces,
   mid grain, and per-cell grit. A cell is visible when `progress > thr`, so a
