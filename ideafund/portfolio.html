@@ -21,17 +21,22 @@
           <rect x="7" y="25" width="16" height="16" fill="currentColor"/>
           <rect x="25" y="25" width="16" height="16" fill="currentColor"/>
           <rect x="25" y="7" width="16" height="16" fill="currentColor"/>
-          <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#c04f27" stroke-width="2.5"/>
+          <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#bf4e26" stroke-width="2.5"/>
         </svg>
         <span class="wordmark">Idea Fund<small>Partners</small></span>
       </a>
-      <button class="nav-toggle" aria-expanded="false" aria-controls="nav">Menu</button>
-      <nav class="site-nav" id="nav" aria-label="Primary">
+      <nav class="site-nav" aria-label="Primary">
         <a href="portfolio.html" aria-current="page">Portfolio</a>
         <a href="team.html">Team</a>
         <a href="index.html#fellowship">Fellowship</a>
         <a class="cta" href="mailto:Info@IdeaFundPartners.com">Pitch&nbsp;us</a>
+        <button class="nav-toggle" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
       </nav>
+    </div>
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="portfolio.html">Portfolio</a>
+      <a href="team.html">Team</a>
+      <a href="index.html#fellowship">Fellowship</a>
     </div>
   </header>
 
@@ -39,144 +44,160 @@
 
     <section class="page-head">
       <div class="shell">
-        <span class="mono">Portfolio &middot; 2007&ndash;present</span>
-        <h1 class="disp">The ledger. <span class="it">125+ investments, most of them started with our check.</span></h1>
-        <p class="lede">Founders across software, tech-enabled services, IT infrastructure,
-        medical devices and advanced materials. A selection of current and exited
-        companies follows; the full record spans four funds.</p>
+        <span class="mono fade" style="--i:0">Portfolio &middot; 2007&ndash;present</span>
+        <div class="grid">
+          <h1 class="disp"><span class="rl" style="--i:0"><span>The ledger.</span></span>
+            <span class="rl" style="--i:1"><span class="it">125+ investments, most of them started with our check.</span></span></h1>
+          <p class="lede fade" style="--i:1">Founders across software, tech-enabled services,
+          IT infrastructure, medical devices and advanced materials. A selection of
+          current and exited companies follows; the full record spans four funds.</p>
+        </div>
       </div>
     </section>
 
-    <section class="sect" aria-label="Portfolio companies">
-      <div class="shell">
-        <table class="ledger">
-          <thead>
-            <tr>
-              <th class="mono no">No.</th>
-              <th class="mono">Company</th>
-              <th class="mono">What they do</th>
-              <th class="mono">HQ</th>
-              <th class="mono">Sector</th>
-              <th class="mono status">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="no">01</td>
-              <td class="co" data-logo="pendo">Pendo</td>
-              <td class="what">Product experience and digital adoption software</td>
-              <td class="tag mono">Raleigh, NC</td>
-              <td class="tag mono">Software</td>
-              <td class="status mono">Active</td>
-            </tr>
-            <tr>
-              <td class="no">02</td>
-              <td class="co" data-logo="icontact">iContact</td>
-              <td class="what">Email marketing for small business</td>
-              <td class="tag mono">Morrisville, NC</td>
-              <td class="tag mono">Software</td>
-              <td class="status mono"><span class="exit">Acquired &mdash; Vocus</span></td>
-            </tr>
-            <tr>
-              <td class="no">03</td>
-              <td class="co" data-logo="payzer">Payzer</td>
-              <td class="what">Payments and financial tools for home-service contractors</td>
-              <td class="tag mono">Charlotte, NC</td>
-              <td class="tag mono">Fintech</td>
-              <td class="status mono"><span class="exit">Acquired &mdash; WEX</span></td>
-            </tr>
-            <tr>
-              <td class="no">04</td>
-              <td class="co" data-logo="sense-photonics">Sense Photonics</td>
-              <td class="what">Solid-state lidar for automotive and industrial vision</td>
-              <td class="tag mono">Durham, NC</td>
-              <td class="tag mono">Deep tech</td>
-              <td class="status mono"><span class="exit">Acquired &mdash; Ouster</span></td>
-            </tr>
-            <tr>
-              <td class="no">05</td>
-              <td class="co" data-logo="social-solutions">Social Solutions</td>
-              <td class="what">Case-management software for nonprofits and public agencies</td>
-              <td class="tag mono">Austin, TX</td>
-              <td class="tag mono">Software</td>
-              <td class="status mono"><span class="exit">Acquired</span></td>
-            </tr>
-            <tr>
-              <td class="no">06</td>
-              <td class="co" data-logo="finmark">Finmark</td>
-              <td class="what">Financial planning and modeling software for startups</td>
-              <td class="tag mono">Raleigh, NC</td>
-              <td class="tag mono">Fintech</td>
-              <td class="status mono"><span class="exit">Acquired &mdash; BILL</span></td>
-            </tr>
-            <tr>
-              <td class="no">07</td>
-              <td class="co" data-logo="reveal-mobile">Reveal Mobile</td>
-              <td class="what">Location-powered audience and attribution analytics</td>
-              <td class="tag mono">Raleigh, NC</td>
-              <td class="tag mono">Software</td>
-              <td class="status mono"><span class="exit">Acquired</span></td>
-            </tr>
-            <tr>
-              <td class="no">08</td>
-              <td class="co" data-logo="second-nature">Second Nature</td>
-              <td class="what">Resident-experience subscriptions for property managers</td>
-              <td class="tag mono">Raleigh, NC</td>
-              <td class="tag mono">Services</td>
-              <td class="status mono">Active</td>
-            </tr>
-            <tr>
-              <td class="no">09</td>
-              <td class="co" data-logo="lucid-bots">Lucid Bots</td>
-              <td class="what">Drones and robots for dangerous exterior cleaning work</td>
-              <td class="tag mono">Charlotte, NC</td>
-              <td class="tag mono">Robotics</td>
-              <td class="status mono">Active</td>
-            </tr>
-            <tr>
-              <td class="no">10</td>
-              <td class="co" data-logo="biospatial">biospatial</td>
-              <td class="what">Public-health insight from emergency medical services data</td>
-              <td class="tag mono">Durham, NC</td>
-              <td class="tag mono">Health data</td>
-              <td class="status mono">Active</td>
-            </tr>
-            <tr>
-              <td class="no">11</td>
-              <td class="co" data-logo="poppy">Poppy</td>
-              <td class="what">Marketplace connecting couples with independent floral designers</td>
-              <td class="tag mono">Atlanta, GA</td>
-              <td class="tag mono">Consumer</td>
-              <td class="status mono">Active</td>
-            </tr>
-            <tr>
-              <td class="no">12</td>
-              <td class="co" data-logo="skillmaker">Skillmaker</td>
-              <td class="what">Training and credentialing for the skilled trades</td>
-              <td class="tag mono">Southeast</td>
-              <td class="tag mono">Education</td>
-              <td class="status mono">Active</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="ledger-foot">
-          <span>A selection across four funds; not a complete list. Inclusion is not an
-          endorsement of any security; past performance is not indicative of future results.</span>
-          <span class="mono">&amp; 100+ more since 2007</span>
-        </div>
+    <section class="sect shell" aria-label="Portfolio companies" style="padding-top: clamp(3rem, 6vw, 5rem)">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th class="mono no">No.</th>
+            <th class="mono">Company</th>
+            <th class="mono">What they do</th>
+            <th class="mono hq-col">HQ</th>
+            <th class="mono">Sector</th>
+            <th class="mono">Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="no">01</td>
+            <td class="co" data-logo="pendo">Pendo</td>
+            <td class="what">Product experience and digital adoption software</td>
+            <td class="tag mono hq-col">Raleigh, NC</td>
+            <td class="tag mono">Software</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">02</td>
+            <td class="co" data-logo="icontact">iContact</td>
+            <td class="what">Email marketing for small business</td>
+            <td class="tag mono hq-col">Morrisville, NC</td>
+            <td class="tag mono">Software</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired &middot; Vocus</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">03</td>
+            <td class="co" data-logo="payzer">Payzer</td>
+            <td class="what">Payments and financial tools for home-service contractors</td>
+            <td class="tag mono hq-col">Charlotte, NC</td>
+            <td class="tag mono">Fintech</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired &middot; WEX</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">04</td>
+            <td class="co" data-logo="sense-photonics">Sense Photonics</td>
+            <td class="what">Solid-state lidar for automotive and industrial vision</td>
+            <td class="tag mono hq-col">Durham, NC</td>
+            <td class="tag mono">Deep tech</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired &middot; Ouster</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">05</td>
+            <td class="co" data-logo="social-solutions">Social Solutions</td>
+            <td class="what">Case-management software for nonprofits and public agencies</td>
+            <td class="tag mono hq-col">Austin, TX</td>
+            <td class="tag mono">Software</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">06</td>
+            <td class="co" data-logo="finmark">Finmark</td>
+            <td class="what">Financial planning and modeling software for startups</td>
+            <td class="tag mono hq-col">Raleigh, NC</td>
+            <td class="tag mono">Fintech</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired &middot; BILL</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">07</td>
+            <td class="co" data-logo="reveal-mobile">Reveal Mobile</td>
+            <td class="what">Location-powered audience and attribution analytics</td>
+            <td class="tag mono hq-col">Raleigh, NC</td>
+            <td class="tag mono">Software</td>
+            <td class="status mono"><span class="dot dot--exit"></span>Acquired</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">08</td>
+            <td class="co" data-logo="second-nature">Second Nature</td>
+            <td class="what">Resident-experience subscriptions for property managers</td>
+            <td class="tag mono hq-col">Raleigh, NC</td>
+            <td class="tag mono">Services</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">09</td>
+            <td class="co" data-logo="lucid-bots">Lucid Bots</td>
+            <td class="what">Drones and robots for dangerous exterior cleaning work</td>
+            <td class="tag mono hq-col">Charlotte, NC</td>
+            <td class="tag mono">Robotics</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">10</td>
+            <td class="co" data-logo="biospatial">biospatial</td>
+            <td class="what">Public-health insight from emergency medical services data</td>
+            <td class="tag mono hq-col">Durham, NC</td>
+            <td class="tag mono">Health data</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">11</td>
+            <td class="co" data-logo="poppy">Poppy</td>
+            <td class="what">Marketplace connecting couples with independent floral designers</td>
+            <td class="tag mono hq-col">Atlanta, GA</td>
+            <td class="tag mono">Consumer</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+          <tr>
+            <td class="no">12</td>
+            <td class="co" data-logo="skillmaker">Skillmaker</td>
+            <td class="what">Training and credentialing for the skilled trades</td>
+            <td class="tag mono hq-col">Southeast</td>
+            <td class="tag mono">Education</td>
+            <td class="status mono"><span class="dot"></span>Active</td>
+            <td class="arr">&rarr;</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="ledger-foot">
+        <span class="note">A selection across four funds; not a complete list. Inclusion is not an
+        endorsement of any security; past performance is not indicative of future results.</span>
+        <span class="mono">&amp; 100+ more since 2007</span>
       </div>
     </section>
 
     <section class="band">
       <div class="shell">
-        <div>
-          <span class="mono">Founders</span>
-          <h2>The best time to meet us is before you raise.</h2>
-        </div>
-        <div>
-          <p>We read every note that comes in. Tell us what you are building, why
-          now, and why you. A deck helps; a warm introduction is not required.</p>
-          <p><a href="mailto:Info@IdeaFundPartners.com">Info@IdeaFundPartners.com&nbsp;&#8599;</a></p>
+        <div class="split grid">
+          <div class="lead io">
+            <span class="mono">Founders</span>
+            <h2>The best time to meet us is before you raise.</h2>
+          </div>
+          <div class="side io" style="--d:120ms">
+            <p>We read every note that comes in. Tell us what you are building, why
+            now, and why you. A deck helps; a warm introduction is not required.</p>
+            <p><a class="uline" href="mailto:Info@IdeaFundPartners.com">Info@IdeaFundPartners.com</a></p>
+          </div>
         </div>
       </div>
     </section>
@@ -185,12 +206,25 @@
 
   <footer class="site-footer">
     <div class="shell">
-      <div class="footer-cols" style="border-top:0">
-        <div>
-          <span class="mono">Visit</span>
-          <address>101 Glen Lennox Drive, Suite 300<br>Chapel Hill, North Carolina 27517</address>
+      <div class="footer-cols grid" style="border-top:0; padding-top: clamp(3rem, 6vw, 4.5rem)">
+        <div class="col">
+          <a class="brand" href="index.html" aria-label="IDEA Fund Partners home">
+            <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="7" y="25" width="16" height="16" fill="currentColor"/>
+              <rect x="25" y="25" width="16" height="16" fill="currentColor"/>
+              <rect x="25" y="7" width="16" height="16" fill="currentColor"/>
+              <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#bf4e26" stroke-width="2.5"/>
+            </svg>
+            <span class="wordmark">Idea Fund<small>Partners</small></span>
+          </a>
+          <p class="footer-brandline">Seed and early-stage venture capital in the
+          Southeast and Mid-Atlantic since 2007.</p>
         </div>
-        <div>
+        <div class="col">
+          <span class="mono">Visit</span>
+          <address><b>IDEA Fund Partners</b>101 Glen Lennox Drive, Suite 300<br>Chapel Hill, NC 27517</address>
+        </div>
+        <div class="col">
           <span class="mono">Explore</span>
           <ul>
             <li><a href="portfolio.html">Portfolio</a></li>
@@ -198,7 +232,7 @@
             <li><a href="index.html#fellowship">Fellowship</a></li>
           </ul>
         </div>
-        <div>
+        <div class="col">
           <span class="mono">Elsewhere</span>
           <ul>
             <li><a href="https://www.linkedin.com/company/ideafundpartners" rel="noopener">LinkedIn</a></li>

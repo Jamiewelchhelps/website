@@ -2,13 +2,26 @@
   "use strict";
 
   var toggle = document.querySelector(".nav-toggle");
-  var nav = document.querySelector(".site-nav");
-  if (toggle && nav) {
+  var menu = document.querySelector(".mobile-menu");
+  if (toggle && menu) {
     toggle.addEventListener("click", function () {
-      var open = nav.classList.toggle("is-open");
+      var open = menu.classList.toggle("is-open");
       toggle.setAttribute("aria-expanded", String(open));
       toggle.textContent = open ? "Close" : "Menu";
     });
+  }
+
+  // Scroll reveals: .io fades in once, honoring a per-element --d delay.
+  var ios = document.querySelectorAll(".io");
+  if ("IntersectionObserver" in window && ios.length) {
+    var ob = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("on"); ob.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.05 });
+    ios.forEach(function (el) { ob.observe(el); });
+  } else {
+    ios.forEach(function (el) { el.classList.add("on"); });
   }
 
   // Company logos are optional drop-ins: if assets/logos/<slug>.svg exists,

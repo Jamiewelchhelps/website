@@ -21,17 +21,22 @@
           <rect x="7" y="25" width="16" height="16" fill="currentColor"/>
           <rect x="25" y="25" width="16" height="16" fill="currentColor"/>
           <rect x="25" y="7" width="16" height="16" fill="currentColor"/>
-          <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#c04f27" stroke-width="2.5"/>
+          <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#bf4e26" stroke-width="2.5"/>
         </svg>
         <span class="wordmark">Idea Fund<small>Partners</small></span>
       </a>
-      <button class="nav-toggle" aria-expanded="false" aria-controls="nav">Menu</button>
-      <nav class="site-nav" id="nav" aria-label="Primary">
+      <nav class="site-nav" aria-label="Primary">
         <a href="portfolio.html">Portfolio</a>
         <a href="team.html" aria-current="page">Team</a>
         <a href="index.html#fellowship">Fellowship</a>
         <a class="cta" href="mailto:Info@IdeaFundPartners.com">Pitch&nbsp;us</a>
+        <button class="nav-toggle" aria-expanded="false" aria-controls="mobile-menu">Menu</button>
       </nav>
+    </div>
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="portfolio.html">Portfolio</a>
+      <a href="team.html">Team</a>
+      <a href="index.html#fellowship">Fellowship</a>
     </div>
   </header>
 
@@ -39,104 +44,100 @@
 
     <section class="page-head">
       <div class="shell">
-        <span class="mono">Team &middot; investing together since 2003</span>
-        <h1 class="disp">A small house, <span class="it">run by people who never left.</span></h1>
-        <p class="lede">Our partners started investing in the region at the MCNC Enterprise
-        Fund in 2003 and spun out to form IDEA Fund Partners in 2007. Most of the team
-        lives within a short drive of the founders we back.</p>
-      </div>
-    </section>
-
-    <section class="sect" id="investment-team">
-      <div class="shell">
-        <div class="sect-head">
-          <span class="mono"><span class="idx">01</span>Investment team</span>
-        </div>
-        <div class="people" style="border-top:0">
-          <div class="person">
-            <span class="no">01</span>
-            <h3>Lister Delgado</h3>
-            <span class="role mono">Managing Partner</span>
-            <p>Co-founded the firm in 2007 after starting his early-stage career at
-            the MCNC Enterprise Fund, the predecessor to NC IDEA. Has led the
-            firm&rsquo;s investing across all four funds.</p>
-          </div>
-          <div class="person">
-            <span class="no">02</span>
-            <h3>John Cambier</h3>
-            <span class="role mono">Partner &amp; CFO</span>
-            <p>Co-founder of the firm. Began investing alongside Lister at MCNC in
-            2003 and now oversees finance and fund operations in addition to his
-            board work.</p>
-          </div>
-          <div class="person">
-            <span class="no">03</span>
-            <h3>Christopher Langford</h3>
-            <span class="role mono">Partner</span>
-            <p>Invests across the portfolio with a particular interest in the built
-            world: construction, home services, and the vertical software that
-            runs them.</p>
-          </div>
-          <div class="person">
-            <span class="no">04</span>
-            <h3>Joe Darcy</h3>
-            <span class="role mono">Principal</span>
-            <p>Works with founders from first meeting through close, and stays
-            involved with portfolio companies well after the wire clears.</p>
-          </div>
-          <div class="person">
-            <span class="no">05</span>
-            <h3>Juan Carlos Pacheco</h3>
-            <span class="role mono">Senior Associate</span>
-            <p>Focuses on sourcing and portfolio management, and on widening the
-            front door of venture capital in the Southeast.</p>
-          </div>
-          <div class="person">
-            <span class="no">06</span>
-            <h3>Arianna Regalado</h3>
-            <span class="role mono">Associate</span>
-            <p>Sources and evaluates new investments across the region, and helps
-            run the firm&rsquo;s Venture Fellowship program.</p>
-          </div>
+        <span class="mono fade" style="--i:0">Team &middot; investing together since 2003</span>
+        <div class="grid">
+          <h1 class="disp"><span class="rl" style="--i:0"><span>A small house,</span></span>
+            <span class="rl" style="--i:1"><span class="it">run by people who never left.</span></span></h1>
+          <p class="lede fade" style="--i:1">Our partners started investing in the region at the
+          MCNC Enterprise Fund in 2003 and spun out to form IDEA Fund Partners in
+          2007. Most of the team lives within a short drive of the founders we back.</p>
         </div>
       </div>
     </section>
 
-    <section class="sect" id="operating-partners">
-      <div class="shell">
-        <div class="sect-head">
-          <span class="mono"><span class="idx">02</span>Operating partners</span>
-        </div>
-        <div class="people" style="border-top:0">
-          <div class="person">
-            <span class="no">07</span>
-            <h3>Chris Halligan</h3>
-            <span class="role mono">Operating Partner</span>
-            <p>A veteran operator who works hands-on with portfolio companies on
-            go-to-market, sales leadership, and the unglamorous parts of scaling.</p>
-          </div>
-          <div class="person">
-            <span class="no">08</span>
-            <h3>David Jones</h3>
-            <span class="role mono">Operating Partner</span>
-            <p>Advises founders on company building from the operator&rsquo;s side of
-            the table, from early hiring plans through later-stage financing.</p>
-          </div>
-        </div>
+    <section class="sect shell" id="investment-team" style="padding-top: clamp(3rem, 6vw, 5rem)">
+      <div class="sect-head io">
+        <span class="mono"><span class="idx">01</span>Investment team</span>
+        <span class="mono aside">Six investors</span>
+      </div>
+      <div class="person grid io">
+        <span class="no">01</span>
+        <h3>Lister Delgado</h3>
+        <span class="role mono">Managing Partner</span>
+        <p>Co-founded the firm in 2007 after starting his early-stage career at the
+        MCNC Enterprise Fund, the predecessor to NC IDEA. Has led the firm&rsquo;s
+        investing across all four funds.</p>
+      </div>
+      <div class="person grid io" style="--d:70ms">
+        <span class="no">02</span>
+        <h3>John Cambier</h3>
+        <span class="role mono">Partner &amp; CFO</span>
+        <p>Co-founder of the firm. Began investing alongside Lister at MCNC in 2003
+        and now oversees finance and fund operations in addition to his board work.</p>
+      </div>
+      <div class="person grid io" style="--d:140ms">
+        <span class="no">03</span>
+        <h3>Christopher Langford</h3>
+        <span class="role mono">Partner</span>
+        <p>Invests across the portfolio with a particular interest in the built
+        world: construction, home services, and the vertical software that runs them.</p>
+      </div>
+      <div class="person grid io">
+        <span class="no">04</span>
+        <h3>Joe Darcy</h3>
+        <span class="role mono">Principal</span>
+        <p>Works with founders from first meeting through close, and stays involved
+        with portfolio companies well after the wire clears.</p>
+      </div>
+      <div class="person grid io" style="--d:70ms">
+        <span class="no">05</span>
+        <h3>Juan Carlos Pacheco</h3>
+        <span class="role mono">Senior Associate</span>
+        <p>Focuses on sourcing and portfolio management, and on widening the front
+        door of venture capital in the Southeast.</p>
+      </div>
+      <div class="person grid io" style="--d:140ms">
+        <span class="no">06</span>
+        <h3>Arianna Regalado</h3>
+        <span class="role mono">Associate</span>
+        <p>Sources and evaluates new investments across the region, and helps run
+        the firm&rsquo;s Venture Fellowship program.</p>
+      </div>
+    </section>
+
+    <section class="sect shell" id="operating-partners">
+      <div class="sect-head io">
+        <span class="mono"><span class="idx">02</span>Operating partners</span>
+      </div>
+      <div class="person grid io">
+        <span class="no">07</span>
+        <h3>Chris Halligan</h3>
+        <span class="role mono">Operating Partner</span>
+        <p>A veteran operator who works hands-on with portfolio companies on
+        go-to-market, sales leadership, and the unglamorous parts of scaling.</p>
+      </div>
+      <div class="person grid io" style="--d:70ms">
+        <span class="no">08</span>
+        <h3>David Jones</h3>
+        <span class="role mono">Operating Partner</span>
+        <p>Advises founders on company building from the operator&rsquo;s side of the
+        table, from early hiring plans through later-stage financing.</p>
       </div>
     </section>
 
     <section class="band">
       <div class="shell">
-        <div>
-          <span class="mono">Venture Fellows</span>
-          <h2>The rest of the table.</h2>
-        </div>
-        <div>
-          <p>Each year a cohort of Venture Fellows works alongside the investment
-          team on sourcing, diligence and portfolio support. A working
-          apprenticeship, not a coffee-fetching program.</p>
-          <p><a href="mailto:Info@IdeaFundPartners.com?subject=Venture%20Fellowship">Ask about the next cohort&nbsp;&#8599;</a></p>
+        <div class="split grid">
+          <div class="lead io">
+            <span class="mono">Venture Fellows</span>
+            <h2>The rest of the table.</h2>
+          </div>
+          <div class="side io" style="--d:120ms">
+            <p>Each year a cohort of Venture Fellows works alongside the investment
+            team on sourcing, diligence and portfolio support. A working
+            apprenticeship, not a coffee-fetching program.</p>
+            <p><a class="uline" href="mailto:Info@IdeaFundPartners.com?subject=Venture%20Fellowship">Ask about the next cohort</a></p>
+          </div>
         </div>
       </div>
     </section>
@@ -145,12 +146,25 @@
 
   <footer class="site-footer">
     <div class="shell">
-      <div class="footer-cols" style="border-top:0">
-        <div>
-          <span class="mono">Visit</span>
-          <address>101 Glen Lennox Drive, Suite 300<br>Chapel Hill, North Carolina 27517</address>
+      <div class="footer-cols grid" style="border-top:0; padding-top: clamp(3rem, 6vw, 4.5rem)">
+        <div class="col">
+          <a class="brand" href="index.html" aria-label="IDEA Fund Partners home">
+            <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+              <rect x="7" y="25" width="16" height="16" fill="currentColor"/>
+              <rect x="25" y="25" width="16" height="16" fill="currentColor"/>
+              <rect x="25" y="7" width="16" height="16" fill="currentColor"/>
+              <rect x="1.5" y="1.5" width="16" height="16" fill="none" stroke="#bf4e26" stroke-width="2.5"/>
+            </svg>
+            <span class="wordmark">Idea Fund<small>Partners</small></span>
+          </a>
+          <p class="footer-brandline">Seed and early-stage venture capital in the
+          Southeast and Mid-Atlantic since 2007.</p>
         </div>
-        <div>
+        <div class="col">
+          <span class="mono">Visit</span>
+          <address><b>IDEA Fund Partners</b>101 Glen Lennox Drive, Suite 300<br>Chapel Hill, NC 27517</address>
+        </div>
+        <div class="col">
           <span class="mono">Explore</span>
           <ul>
             <li><a href="portfolio.html">Portfolio</a></li>
@@ -158,7 +172,7 @@
             <li><a href="index.html#fellowship">Fellowship</a></li>
           </ul>
         </div>
-        <div>
+        <div class="col">
           <span class="mono">Elsewhere</span>
           <ul>
             <li><a href="https://www.linkedin.com/company/ideafundpartners" rel="noopener">LinkedIn</a></li>
